@@ -1,0 +1,68 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/oubli-auth",
+    "crates/oubli-store",
+    "crates/oubli-backup",
+    "crates/oubli-wallet",
+    "crates/oubli-swap",
+    "crates/oubli-bridge",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Internal crates
+oubli-auth = { path = "crates/oubli-auth" }
+oubli-store = { path = "crates/oubli-store" }
+oubli-backup = { path = "crates/oubli-backup" }
+oubli-wallet = { path = "crates/oubli-wallet" }
+oubli-swap = { path = "crates/oubli-swap" }
+oubli-bridge = { path = "crates/oubli-bridge" }
+
+# Logging
+log = "0.4"
+
+# KMS dependencies (crates.io)
+krusty-kms = "0.3.0"
+krusty-kms-common = "0.3.0"
+krusty-kms-crypto = "0.3.0"
+krusty-kms-sdk = "0.3.0"
+krusty-kms-client = "0.3.0"
+
+# Crypto
+argon2 = "0.5"
+aes-gcm = "0.10"
+zeroize = { version = "1", features = ["derive"] }
+
+# Starknet
+starknet-types-core = { version = "0.2.0", features = ["hash"] }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Network
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+
+# FFI
+uniffi = "0.28"
+
+# Mnemonic
+bip39 = "2.2"
+
+# Async traits
+async-trait = "0.1"
+
+# Misc
+hex = "0.4"
+rand = "0.8"

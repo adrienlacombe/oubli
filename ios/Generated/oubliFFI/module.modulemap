@@ -1,0 +1,4 @@
+module oubliFFI {
+    header "oubliFFI.h"
+    export *
+}

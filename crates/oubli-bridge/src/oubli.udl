@@ -1,0 +1,192 @@
+namespace oubli {};
+
+[Error]
+enum OubliError {
+    "Auth",
+    "Store",
+    "Backup",
+    "Kms",
+    "Rpc",
+    "Paymaster",
+    "InvalidState",
+    "NoActiveAccount",
+    "Denomination",
+    "InsufficientBalance",
+    "Network",
+};
+
+enum WalletStateFFI {
+    "Onboarding",
+    "Locked",
+    "Ready",
+    "Processing",
+    "Error",
+    "SeedBackup",
+    "Wiped",
+};
+
+dictionary WalletStateInfo {
+    WalletStateFFI state;
+    string? address;
+    string? public_key;
+    string? balance_sats;
+    string? pending_sats;
+    string? operation;
+    string? error_message;
+    string? auto_fund_error;
+};
+
+dictionary VerificationPromptFFI {
+    u32 word_number;
+};
+
+dictionary SeedBackupStateFFI {
+    sequence<sequence<string>> word_groups;
+    sequence<VerificationPromptFFI> prompts;
+};
+
+dictionary ActivityEventFFI {
+    string event_type;
+    string? amount_sats;
+    string tx_hash;
+    u64 block_number;
+};
+
+dictionary SwapQuoteFFI {
+    string swap_id;
+    string input_amount;
+    string output_amount;
+    string fee;
+    u64 expiry;
+    string? btc_address;
+    string? ln_invoice;
+};
+
+dictionary SwapStatusFFI {
+    string swap_id;
+    string state;
+    string? tx_id;
+};
+
+dictionary SwapSummaryFFI {
+    string swap_id;
+    string state;
+    string input_amount;
+    string output_amount;
+};
+
+dictionary SwapLimitsFFI {
+    string input_min;
+    string? input_max;
+    string output_min;
+    string? output_max;
+};
+
+callback interface PlatformStorageCallback {
+    [Throws=OubliError]
+    void secure_store(string key, sequence<u8> value);
+
+    [Throws=OubliError]
+    sequence<u8>? secure_load(string key);
+
+    [Throws=OubliError]
+    void secure_delete(string key);
+
+    [Throws=OubliError]
+    boolean request_biometric(string reason);
+
+    boolean biometric_available();
+
+    [Throws=OubliError]
+    sequence<u8> generate_hardware_salt();
+};
+
+interface OubliWallet {
+    [Throws=OubliError]
+    constructor(PlatformStorageCallback storage);
+
+    WalletStateInfo get_state();
+
+    [Throws=OubliError]
+    void handle_complete_onboarding(string mnemonic);
+
+    [Throws=OubliError]
+    void handle_unlock_biometric();
+
+    [Throws=OubliError]
+    void handle_lock();
+
+    [Throws=OubliError]
+    SeedBackupStateFFI handle_start_seed_backup(string mnemonic);
+
+    [Throws=OubliError]
+    boolean handle_verify_seed_word(u32 prompt_index, string answer);
+
+    [Throws=OubliError]
+    string get_mnemonic();
+
+    [Throws=OubliError]
+    string generate_mnemonic();
+
+    [Throws=OubliError]
+    void validate_mnemonic(string phrase);
+
+    [Throws=OubliError]
+    string handle_fund(string amount_sats);
+
+    [Throws=OubliError]
+    string handle_rollover();
+
+    [Throws=OubliError]
+    string handle_send(string amount_sats, string recipient);
+
+    [Throws=OubliError]
+    string handle_transfer(string amount_sats, string recipient);
+
+    [Throws=OubliError]
+    string handle_withdraw(string amount_sats, string recipient);
+
+    [Throws=OubliError]
+    string handle_ragequit(string recipient);
+
+    [Throws=OubliError]
+    void handle_refresh_balance();
+
+    void update_rpc_url(string url);
+
+    string get_rpc_url();
+
+    [Throws=OubliError]
+    sequence<ActivityEventFFI> get_activity();
+
+    sequence<ActivityEventFFI> get_cached_activity();
+
+    double? get_btc_price_usd();
+
+    [Throws=OubliError]
+    SwapQuoteFFI swap_btc_to_wbtc(u64 amount_sats, boolean exact_in);
+
+    [Throws=OubliError]
+    SwapQuoteFFI swap_wbtc_to_btc(u64 amount_sats, string btc_address, boolean exact_in);
+
+    [Throws=OubliError]
+    SwapQuoteFFI swap_ln_to_wbtc(u64 amount_sats, boolean exact_in);
+
+    [Throws=OubliError]
+    void swap_execute(string swap_id);
+
+    [Throws=OubliError]
+    SwapStatusFFI swap_status(string swap_id);
+
+    [Throws=OubliError]
+    sequence<SwapSummaryFFI> swap_list();
+
+    [Throws=OubliError]
+    SwapLimitsFFI swap_limits(string direction);
+
+    [Throws=OubliError]
+    void receive_lightning_wait(string swap_id);
+
+    [Throws=OubliError]
+    string pay_lightning(string bolt11);
+};

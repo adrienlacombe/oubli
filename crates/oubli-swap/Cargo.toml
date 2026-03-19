@@ -1,0 +1,31 @@
+[package]
+name = "oubli-swap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# JS runtime
+rquickjs = { version = "0.9", features = ["classes", "properties", "parallel", "futures", "macro", "bindgen"] }
+
+# Async
+tokio = { workspace = true }
+
+# Network (for fetch polyfill)
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# CSPRNG for crypto polyfill
+getrandom = "0.2"
+
+# Base64 for binary fetch bodies
+base64 = "0.22"
+
+# Logging
+log = "0.4"

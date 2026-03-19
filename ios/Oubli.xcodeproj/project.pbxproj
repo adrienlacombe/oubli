@@ -1,0 +1,490 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1612232EDF773DBB57CB6A04 /* SeedPhraseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A6AF93C44B9BE0512E5DED /* SeedPhraseUITests.swift */; };
+		1D16DD31B98AB8AA4CB4CB7D /* OubliApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8564D8E7F2019FC31FC9977C /* OubliApp.swift */; };
+		30F8C36B632B9EB313805714 /* KeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287821FB14E7B56253E2D471 /* KeychainStorage.swift */; };
+		4672104C7346C13C1F6A8BA0 /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96AFE6677765C46C287A01B3 /* WalletViewModel.swift */; };
+		4966A1073578050D6F7C4E55 /* ProcessingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */; };
+		QRS00001000000000000001 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = QRS00002000000000000001 /* QRScannerView.swift */; };
+		65FA030DFBA1FDA2F61FDA31 /* WalletE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95D84C518EB9D7DCF61C43D /* WalletE2ETests.swift */; };
+		7D662EF9F2D850B05336E8CC /* BalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC83C393C11B50B15303B59 /* BalanceView.swift */; };
+		9786487333F6E4FF0CDEE992 /* SeedBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */; };
+		9A559F2A7B7ECFF2F89DC149 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */; };
+		AD45E8D912A63A0724D79DC2 /* oubli.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0114A555A5F64661B35DDF /* oubli.swift */; };
+		EBF12403F1DAF01C4E5AB1E6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952C80A88E130490E779D31F /* ContentView.swift */; };
+		F0BEFFCAF60EA552D1CE0C0D /* LockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9394E8D44E14075E87B6DB3F /* LockedView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		14B970CFE89F2902474E772A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FDF99315ACCC50F13408E7BA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B7897971B0DF6B27B7CCE548;
+			remoteInfo = Oubli;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		14A6AF93C44B9BE0512E5DED /* SeedPhraseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedPhraseUITests.swift; sourceTree = "<group>"; };
+		287821FB14E7B56253E2D471 /* KeychainStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStorage.swift; sourceTree = "<group>"; };
+		3C52EFF27AB2B6A8FD2EBDC5 /* OubliUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = OubliUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B74DA06B629FCD72CDA97C7 /* Oubli.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Oubli.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8564D8E7F2019FC31FC9977C /* OubliApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OubliApp.swift; sourceTree = "<group>"; };
+		8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingView.swift; sourceTree = "<group>"; };
+		QRS00002000000000000001 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		9394E8D44E14075E87B6DB3F /* LockedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedView.swift; sourceTree = "<group>"; };
+		952C80A88E130490E779D31F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		96AFE6677765C46C287A01B3 /* WalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
+		9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedBackupView.swift; sourceTree = "<group>"; };
+		AFC83C393C11B50B15303B59 /* BalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BalanceView.swift; sourceTree = "<group>"; };
+		CD0114A555A5F64661B35DDF /* oubli.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = oubli.swift; sourceTree = "<group>"; };
+		E95D84C518EB9D7DCF61C43D /* WalletE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletE2ETests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		15617015C5779F6C5564ACD6 /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				CD0114A555A5F64661B35DDF /* oubli.swift */,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		3A034AC17084586BA62CA84E /* OubliUITests */ = {
+			isa = PBXGroup;
+			children = (
+				14A6AF93C44B9BE0512E5DED /* SeedPhraseUITests.swift */,
+				E95D84C518EB9D7DCF61C43D /* WalletE2ETests.swift */,
+			);
+			path = OubliUITests;
+			sourceTree = "<group>";
+		};
+		532980B8E747BF6250C506E3 /* Oubli */ = {
+			isa = PBXGroup;
+			children = (
+				8564D8E7F2019FC31FC9977C /* OubliApp.swift */,
+				AD08B6E493FDDA887333A55A /* Platform */,
+				B953495FF043136C99B932AA /* ViewModels */,
+				C1B7D1702C40FF77563AF72B /* Views */,
+			);
+			path = Oubli;
+			sourceTree = "<group>";
+		};
+		AD08B6E493FDDA887333A55A /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				287821FB14E7B56253E2D471 /* KeychainStorage.swift */,
+			);
+			path = Platform;
+			sourceTree = "<group>";
+		};
+		B953495FF043136C99B932AA /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				96AFE6677765C46C287A01B3 /* WalletViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		C1B7D1702C40FF77563AF72B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AFC83C393C11B50B15303B59 /* BalanceView.swift */,
+				952C80A88E130490E779D31F /* ContentView.swift */,
+				9394E8D44E14075E87B6DB3F /* LockedView.swift */,
+				9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */,
+				8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */,
+				QRS00002000000000000001 /* QRScannerView.swift */,
+				A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		CB0D999C9C6D25602492DCE5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6B74DA06B629FCD72CDA97C7 /* Oubli.app */,
+				3C52EFF27AB2B6A8FD2EBDC5 /* OubliUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F2BCED9BE51EAF3BF9A3831C = {
+			isa = PBXGroup;
+			children = (
+				15617015C5779F6C5564ACD6 /* Generated */,
+				532980B8E747BF6250C506E3 /* Oubli */,
+				3A034AC17084586BA62CA84E /* OubliUITests */,
+				CB0D999C9C6D25602492DCE5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		162DDC008D074334DB8E27AC /* OubliUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2571EC98E98E6A54C8475AA8 /* Build configuration list for PBXNativeTarget "OubliUITests" */;
+			buildPhases = (
+				EDE3395C0849A37E08CC1572 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3C65829EDF27253769932CF5 /* PBXTargetDependency */,
+			);
+			name = OubliUITests;
+			packageProductDependencies = (
+			);
+			productName = OubliUITests;
+			productReference = 3C52EFF27AB2B6A8FD2EBDC5 /* OubliUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		B7897971B0DF6B27B7CCE548 /* Oubli */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 06B9147F07C15B76AF5FA2F9 /* Build configuration list for PBXNativeTarget "Oubli" */;
+			buildPhases = (
+				415C6DE7BC5902FDEF7BC599 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Oubli;
+			packageProductDependencies = (
+			);
+			productName = Oubli;
+			productReference = 6B74DA06B629FCD72CDA97C7 /* Oubli.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FDF99315ACCC50F13408E7BA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					162DDC008D074334DB8E27AC = {
+						TestTargetID = B7897971B0DF6B27B7CCE548;
+					};
+				};
+			};
+			buildConfigurationList = 4EAA7C518E5B91A300F5D218 /* Build configuration list for PBXProject "Oubli" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F2BCED9BE51EAF3BF9A3831C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B7897971B0DF6B27B7CCE548 /* Oubli */,
+				162DDC008D074334DB8E27AC /* OubliUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		415C6DE7BC5902FDEF7BC599 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D662EF9F2D850B05336E8CC /* BalanceView.swift in Sources */,
+				EBF12403F1DAF01C4E5AB1E6 /* ContentView.swift in Sources */,
+				30F8C36B632B9EB313805714 /* KeychainStorage.swift in Sources */,
+				F0BEFFCAF60EA552D1CE0C0D /* LockedView.swift in Sources */,
+				9A559F2A7B7ECFF2F89DC149 /* OnboardingView.swift in Sources */,
+				1D16DD31B98AB8AA4CB4CB7D /* OubliApp.swift in Sources */,
+				4966A1073578050D6F7C4E55 /* ProcessingView.swift in Sources */,
+				QRS00001000000000000001 /* QRScannerView.swift in Sources */,
+				9786487333F6E4FF0CDEE992 /* SeedBackupView.swift in Sources */,
+				4672104C7346C13C1F6A8BA0 /* WalletViewModel.swift in Sources */,
+				AD45E8D912A63A0724D79DC2 /* oubli.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EDE3395C0849A37E08CC1572 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1612232EDF773DBB57CB6A04 /* SeedPhraseUITests.swift in Sources */,
+				65FA030DFBA1FDA2F61FDA31 /* WalletE2ETests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3C65829EDF27253769932CF5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B7897971B0DF6B27B7CCE548 /* Oubli */;
+			targetProxy = 14B970CFE89F2902474E772A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		7A718A72006A3C8686B15B66 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.oubli.wallet.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Oubli;
+			};
+			name = Debug;
+		};
+		8A77DE35C8C864FF77715BFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.oubli.wallet.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Oubli;
+			};
+			name = Release;
+		};
+		C61E72815894E507E6DCAFD3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		D1333C30DE65371D962D1DA4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Oubli needs camera access to scan QR codes for sending.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios/release",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-loubli_bridge",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.oubli.wallet;
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = (
+					"$(PROJECT_DIR)/Generated",
+				);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E14DF148AA179F0D315F7B04 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+		E7CF96865A12C8791BC8C117 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Oubli needs camera access to scan QR codes for sending.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/debug",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-loubli_bridge",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.oubli.wallet;
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = (
+					"$(PROJECT_DIR)/Generated",
+				);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		06B9147F07C15B76AF5FA2F9 /* Build configuration list for PBXNativeTarget "Oubli" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7CF96865A12C8791BC8C117 /* Debug */,
+				D1333C30DE65371D962D1DA4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2571EC98E98E6A54C8475AA8 /* Build configuration list for PBXNativeTarget "OubliUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A718A72006A3C8686B15B66 /* Debug */,
+				8A77DE35C8C864FF77715BFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4EAA7C518E5B91A300F5D218 /* Build configuration list for PBXProject "Oubli" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C61E72815894E507E6DCAFD3 /* Debug */,
+				E14DF148AA179F0D315F7B04 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FDF99315ACCC50F13408E7BA /* Project object */;
+}

@@ -1,0 +1,60 @@
+name: Oubli
+options:
+  bundleIdPrefix: com.oubli
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+
+targets:
+  Oubli:
+    type: application
+    platform: iOS
+    sources:
+      - path: Oubli
+        type: group
+      - path: Generated/oubli.swift
+        type: file
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.oubli.wallet
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_GENERATION_MODE: GeneratedFile
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_INCLUDE_PATHS:
+          - "$(PROJECT_DIR)/Generated"
+        OTHER_LDFLAGS:
+          - "-loubli_bridge"
+        LIBRARY_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/debug"
+          - "$(PROJECT_DIR)/../target/aarch64-apple-ios/release"
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+      configs:
+        Debug:
+          LIBRARY_SEARCH_PATHS:
+            - "$(inherited)"
+            - "$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/debug"
+        Release:
+          LIBRARY_SEARCH_PATHS:
+            - "$(inherited)"
+            - "$(PROJECT_DIR)/../target/aarch64-apple-ios/release"
+    dependencies: []
+    preBuildScripts: []
+
+  OubliUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: OubliUITests
+        type: group
+    dependencies:
+      - target: Oubli
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.oubli.wallet.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Oubli
