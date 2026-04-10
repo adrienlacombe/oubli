@@ -1,0 +1,33 @@
+name: Publish to Zapstore
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.1.63)'
+        required: true
+
+jobs:
+  publish:
+    name: Publish to Zapstore
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Download release APK
+        run: gh release download "${{ inputs.tag }}" --pattern "oubli-*.apk" --dir .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Copy APK to expected path
+        run: |
+          mkdir -p android/app/build/outputs/apk/release
+          cp oubli-*.apk android/app/build/outputs/apk/release/app-release.apk
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install zsp
+        run: go install github.com/zapstore/zsp@v0.4.4
+      - name: Publish to Zapstore
+        working-directory: android
+        run: SIGN_WITH="${{ secrets.NOSTR_NSEC }}" zsp publish -y --skip-preview --skip-certificate-linking zapstore.yaml
