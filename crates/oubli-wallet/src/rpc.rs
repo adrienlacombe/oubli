@@ -541,7 +541,7 @@ impl RpcClient {
                         json = v;
                         break;
                     }
-                    Err(e) if attempt < 3 => continue,
+                    Err(_) if attempt < 3 => continue,
                     Err(e) => return Err(WalletError::Rpc(format!("RPC error: {e}"))),
                 }
             }
