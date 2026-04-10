@@ -72,6 +72,89 @@ jobs:
           path: target/coverage/android-unit
           if-no-files-found: error
 
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs:
+      - rust-coverage
+      - android-unit-tests
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Download Rust coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-coverage
+          path: artifacts/rust-coverage
+      - name: Download Android coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-unit-coverage
+          path: artifacts/android-unit-coverage
+      - name: Build combined coverage summary
+        run: |
+          RUST_SUMMARY="$(find artifacts/rust-coverage -name summary.txt -print -quit)"
+          ANDROID_SUMMARY="$(find artifacts/android-unit-coverage -name summary.txt -print -quit)"
+          test -n "$RUST_SUMMARY"
+          test -n "$ANDROID_SUMMARY"
+          {
+            echo "## Coverage Summary"
+            echo
+            echo "### Rust"
+            echo
+            echo '```text'
+            cat "$RUST_SUMMARY"
+            echo '```'
+            echo
+            echo "### Android JVM"
+            echo
+            echo '```text'
+            cat "$ANDROID_SUMMARY"
+            echo '```'
+            echo
+            echo "Artifacts:"
+            echo "- \`rust-coverage\`"
+            echo "- \`android-unit-coverage\`"
+          } > coverage-summary.md
+          cat coverage-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Update pull request coverage comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- codex-coverage-summary -->';
+            const summary = fs.readFileSync('coverage-summary.md', 'utf8');
+            const body = `${marker}\n${summary}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
   ios-ui-tests:
     name: iOS UI Tests
     runs-on: macos-latest
@@ -156,40 +239,3 @@ jobs:
           packages: ndk;27.0.12077973
       - name: Verify checked-in Kotlin bindings
         run: make verify-kotlin-bindings
-
-  build-apk:
-    name: Build Release APK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-      - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - name: Set up Android SDK + NDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: ndk;27.0.12077973
-      - name: Cross-compile native library
-        env:
-          OUBLI_MAINNET_RPC_URL: ${{ secrets.OUBLI_MAINNET_RPC_URL }}
-          OUBLI_MAINNET_PAYMASTER_API_KEY: ${{ secrets.OUBLI_MAINNET_PAYMASTER_API_KEY }}
-          OUBLI_FEE_COLLECTOR_PUBKEY: ${{ secrets.OUBLI_FEE_COLLECTOR_PUBKEY }}
-          OUBLI_FEE_PERCENT: ${{ secrets.OUBLI_FEE_PERCENT }}
-        run: make build-android
-      - name: Decode keystore
-        run: echo "${{ secrets.OUBLI_KEYSTORE_BASE64 }}" | base64 -d > android/oubli-release.jks
-      - name: Build release APK
-        run: cd android && OUBLI_KEYSTORE_PASSWORD="${{ secrets.OUBLI_KEYSTORE_PASSWORD }}" ./gradlew assembleRelease
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
