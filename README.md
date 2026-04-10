@@ -108,9 +108,18 @@ git push origin v0.1.64
 
 The **Release** workflow builds a signed APK and creates a GitHub Release with the APK attached.
 
-### 3. Publish to Zapstore
+### 3. Publish to Zapstore (local)
 
-Go to **Actions > Publish to Zapstore > Run workflow**, enter the tag (e.g. `v0.1.64`), and click **Run**. This downloads the release APK and publishes it to Zapstore.
+Download the release APK and publish with your bunker signer:
+
+```sh
+gh release download v0.1.64 --pattern "oubli-*.apk" --dir /tmp/oubli-release
+mkdir -p android/app/build/outputs/apk/release
+cp /tmp/oubli-release/oubli-*.apk android/app/build/outputs/apk/release/app-release.apk
+cd android && SIGN_WITH="bunker://..." ~/go/bin/zsp publish -y --skip-preview --skip-certificate-linking zapstore.yaml
+```
+
+This keeps your Nostr signing key on your phone (Amber approves via bunker).
 
 ### Required GitHub secrets
 
@@ -122,7 +131,6 @@ Go to **Actions > Publish to Zapstore > Run workflow**, enter the tag (e.g. `v0.
 | `OUBLI_MAINNET_PAYMASTER_API_KEY` | Mainnet paymaster API key |
 | `OUBLI_FEE_COLLECTOR_PUBKEY` | Fee collector public key |
 | `OUBLI_FEE_PERCENT` | Fee percentage |
-| `NOSTR_NSEC` | Nostr private key (nsec) for Zapstore signing |
 
 ## Safety
 
