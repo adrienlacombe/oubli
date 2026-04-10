@@ -68,15 +68,15 @@ The cryptographic and protocol layer is provided by the `kms` monorepo's **Rust 
 
 | Capability | `kms` Crate | Notes |
 |---|---|---|
-| BIP-39 mnemonic (12-24 words) | `ghoul-kms` (`crates/core/kms`) | `generate_mnemonic()`, `validate_mnemonic()`, `mnemonic_to_seed()` |
-| HD key derivation | `ghoul-kms` | `derive_private_key()`, `derive_keypair()`, `derive_view_keypair()` |
-| Stark curve key grinding | `ghoul-kms` | secp256k1 -> Stark curve rejection sampling |
+| BIP-39 mnemonic (12-24 words) | `krusty-kms` (`crates/core/kms`) | `generate_mnemonic()`, `validate_mnemonic()`, `mnemonic_to_seed()` |
+| HD key derivation | `krusty-kms` | `derive_private_key()`, `derive_keypair()`, `derive_view_keypair()` |
+| Stark curve key grinding | `krusty-kms` | secp256k1 -> Stark curve rejection sampling |
 | ElGamal encrypt/decrypt | `she-core` (`crates/core/she-core`) | `ElGamal::encrypt()`, `ElGamal::decrypt()` |
 | ZK proofs (PoE, PoE2, Range, Bit, Audit) | `she-core` | Fiat-Shamir non-interactive, `Poe::prove()`, `Range::prove()`, etc. |
 | Tongo operations (all 5) | `tongo-sdk` (`crates/core/tongo-sdk`) | `TongoAccount::fund()`, `transfer()`, `rollover()`, `withdraw()`, `ragequit()` |
 | Starknet RPC + address derivation | `starknet-client` (`crates/core/starknet-client`) | Counterfactual account address derivation (Argent-style on Sepolia/mainnet; devnet custom class) |
-| Dual-key model | `ghoul-kms` | Owner (coin type 5454) + View (coin type 5353) |
-| `SecretFelt` with `Zeroize` on drop | `ghoul-common` (`crates/core/common`) | Redacted `Debug`, volatile zeroing, explicit `.expose_secret()` access, no `Deref`/`Serialize` |
+| Dual-key model | `krusty-kms` | Owner (coin type 5454) + View (coin type 5353) |
+| `SecretFelt` with `Zeroize` on drop | `krusty-kms-common` (`crates/core/common`) | Redacted `Debug`, volatile zeroing, explicit `.expose_secret()` access, no `Deref`/`Serialize` |
 | Proof intermediate zeroization | `she-core` | All blinding factors (`r`, `r_b`, `r_r`, `k1`, `k2`) wrapped in `SecretFelt`; scalar intermediate bytes zeroized |
 | Deterministic RNG gated | `she-core` | `set_deterministic_rng()` behind `#[cfg(feature = "test-utils")]` -- cannot compile in production |
 | Nostr messaging | `nostr-messaging` (`crates/core/nostr-messaging`) | NIP-44: ECDH + HKDF + ChaCha20 |
@@ -198,8 +198,8 @@ Seed Phrase (BIP-39, 256-bit entropy)
 
 ### 3.2 Seed Generation (via `kms`)
 
-1. Call `ghoul_kms::mnemonic::generate_mnemonic(24)` -> `kms` generates 256 bits via platform CSPRNG, returns 24-word BIP-39 mnemonic.
-2. Call `ghoul_kms::mnemonic::mnemonic_to_seed(mnemonic, passphrase)` -> PBKDF2-HMAC-SHA512 (2048 rounds) -> 512-bit seed.
+1. Call `krusty_kms::mnemonic::generate_mnemonic(24)` -> `kms` generates 256 bits via platform CSPRNG, returns 24-word BIP-39 mnemonic.
+2. Call `krusty_kms::mnemonic::mnemonic_to_seed(mnemonic, passphrase)` -> PBKDF2-HMAC-SHA512 (2048 rounds) -> 512-bit seed.
 3. Oubli's `oubli-store` encrypts the seed with KEK immediately (see Section 4). The mnemonic string is passed to the UI via UniFFI only during backup display, then zeroized.
 4. `kms` handles internal zeroization of raw entropy via `SecretFelt` / `Zeroize`.
 
@@ -209,10 +209,10 @@ All derivation uses BIP-32 over secp256k1, then Stark grinding for Stark curve k
 
 | Derived Key | `kms` Rust Function | Coin Type | Algorithm |
 |-------------|---------------------|-----------|-----------|
-| Tongo Owner Key (`sk_owner`) | `ghoul_kms::derivation::derive_keypair(seed, 5454, 0, 0)` | 5454 | BIP-44 + Stark grind |
-| Tongo View Key (`sk_view`) | `ghoul_kms::derivation::derive_view_keypair(seed, 0, 0)` | 5353 | BIP-44 + Stark grind |
-| Starknet Signing Key | `ghoul_kms::derivation::derive_keypair(seed, 9004, 0, 0)` | 9004 | BIP-44 + Stark grind |
-| Nostr Key | `ghoul_kms::derivation::derive_nostr_keypair(seed, 0, 0)` | 1237 | BIP-44 (secp256k1, no grind) |
+| Tongo Owner Key (`sk_owner`) | `krusty_kms::derivation::derive_keypair(seed, 5454, 0, 0)` | 5454 | BIP-44 + Stark grind |
+| Tongo View Key (`sk_view`) | `krusty_kms::derivation::derive_view_keypair(seed, 0, 0)` | 5353 | BIP-44 + Stark grind |
+| Starknet Signing Key | `krusty_kms::derivation::derive_keypair(seed, 9004, 0, 0)` | 9004 | BIP-44 + Stark grind |
+| Nostr Key | `krusty_kms::derivation::derive_nostr_keypair(seed, 0, 0)` | 1237 | BIP-44 (secp256k1, no grind) |
 | Hint Key | `HKDF-SHA256(ikm=sk_owner, salt="oubli-hint", info="xchacha12")` | N/A | HKDF (RFC 5869) |
 
 ### 3.4 Tongo Public Key Computation
@@ -226,8 +226,8 @@ Export in two formats:
 - **Base58**: Tongo address string -- used for display and sharing
 
 #### Quality Gate: Key Generation
-- [ ] `ghoul_kms::mnemonic::generate_mnemonic(24)` returns valid BIP-39 mnemonic (checksum verified by `validate_mnemonic`)
-- [ ] `ghoul_kms::derivation::derive_keypair` for coin types 5454, 5353, 9004 all produce valid Stark curve points
+- [ ] `krusty_kms::mnemonic::generate_mnemonic(24)` returns valid BIP-39 mnemonic (checksum verified by `validate_mnemonic`)
+- [ ] `krusty_kms::derivation::derive_keypair` for coin types 5454, 5353, 9004 all produce valid Stark curve points
 - [ ] Hint key is 256 bits and deterministically reproducible from `sk_owner`
 - [ ] Key derivation is deterministic: same seed always produces same keys (verified against `kms` parity vectors in `fixtures/vectors/parity/`)
 - [ ] Dual-key separation: owner key (5454) differs from view key (5353) for same seed
@@ -956,7 +956,7 @@ Users can prove transaction details to a third party without revealing `sk`:
 - [ ] Fund + View Balance operations (via `kms` `tongo-sdk`)
 - [ ] Auto-rollover on unlock (detect pending > 0, queue rollover at head)
 - [ ] Seed backup display + verification flow (24 words, clipboard blocked, screenshots blocked)
-- [ ] Seed restore flow (enter mnemonic -> `ghoul_kms::validate_mnemonic` -> derive keys -> query chain)
+- [ ] Seed restore flow (enter mnemonic -> `krusty_kms::validate_mnemonic` -> derive keys -> query chain)
 - [ ] iOS SwiftUI shell: renders `WalletState`, emits user actions
 - [ ] Android Compose shell: renders `WalletState`, emits user actions
 - [ ] CI pipeline: `cargo test` + cross-compile `liboubli` + UniFFI bindgen + platform smoke tests

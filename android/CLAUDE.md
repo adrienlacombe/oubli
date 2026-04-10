@@ -11,7 +11,7 @@ Repo-wide workflow lives in [`README.md`](../README.md) and [`AGENTS.md`](../AGE
 
 # Native bridge (UniFFI)
 - Native lib: `app/src/main/jniLibs/arm64-v8a/liboubli_bridge.so`
-- Generated bindings: `app/src/main/java/com/oubli/wallet/uniffi/oubli/oubli.kt`
+- Generated bindings: `app/src/main/java/uniffi/oubli/oubli.kt`
 - Rebuild .so when Rust bridge code changes: `make build-android` (from repo root)
 - Regenerate Kotlin bindings from the compiled .so: `make regen-kotlin` (from repo root)
 - **Never regenerate bindings from .udl alone** — produces wrong library name, causing dlopen crash
@@ -21,5 +21,5 @@ Repo-wide workflow lives in [`README.md`](../README.md) and [`AGENTS.md`](../AGE
 - **Always source `.mainnet.env` before building**: `set -a && source .mainnet.env && set +a` (from repo root). `build.rs` XOR-encodes RPC URLs, paymaster keys, and fee config at compile time. Without this, secrets are empty and the wallet fails with "invalid rpc url" on launch.
 - Debug: `cd android && ./gradlew assembleDebug`
 - Release: `cd android && OUBLI_KEYSTORE_PASSWORD="..." ./gradlew assembleRelease`
-- ABI: arm64-v8a only, minSdk=26, targetSdk=34, compileSdk=35
+- ABI: arm64-v8a only, minSdk=26, targetSdk=36, compileSdk=36
 - ProGuard enabled for release (isMinifyEnabled=true, isShrinkResources=true)
