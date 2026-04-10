@@ -156,3 +156,40 @@ jobs:
           packages: ndk;27.0.12077973
       - name: Verify checked-in Kotlin bindings
         run: make verify-kotlin-bindings
+
+  build-apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ndk;27.0.12077973
+      - name: Cross-compile native library
+        env:
+          OUBLI_MAINNET_RPC_URL: ${{ secrets.OUBLI_MAINNET_RPC_URL }}
+          OUBLI_MAINNET_PAYMASTER_API_KEY: ${{ secrets.OUBLI_MAINNET_PAYMASTER_API_KEY }}
+          OUBLI_FEE_COLLECTOR_PUBKEY: ${{ secrets.OUBLI_FEE_COLLECTOR_PUBKEY }}
+          OUBLI_FEE_PERCENT: ${{ secrets.OUBLI_FEE_PERCENT }}
+        run: make build-android
+      - name: Decode keystore
+        run: echo "${{ secrets.OUBLI_KEYSTORE_BASE64 }}" | base64 -d > android/oubli-release.jks
+      - name: Build release APK
+        run: cd android && OUBLI_KEYSTORE_PASSWORD="${{ secrets.OUBLI_KEYSTORE_PASSWORD }}" ./gradlew assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

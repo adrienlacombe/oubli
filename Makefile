@@ -175,8 +175,10 @@ setup-ios: build-ios-sim generate-swift
 # ── Android ──────────────────────────────────────────────────
 
 build-android:
-	ANDROID_NDK_HOME=$${ANDROID_NDK_HOME:-$$HOME/Library/Android/sdk/ndk/28.2.13676358} \
-	BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$${ANDROID_NDK_HOME:-$$HOME/Library/Android/sdk/ndk/28.2.13676358}/toolchains/llvm/prebuilt/darwin-x86_64/sysroot --target=aarch64-linux-android26" \
+	$(eval NDK_HOME := $(or $(ANDROID_NDK_HOME),$(HOME)/Library/Android/sdk/ndk/28.2.13676358))
+	$(eval NDK_HOST := $(shell uname -s | sed 's/Darwin/darwin-x86_64/' | sed 's/Linux/linux-x86_64/'))
+	ANDROID_NDK_HOME=$(NDK_HOME) \
+	BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$(NDK_HOME)/toolchains/llvm/prebuilt/$(NDK_HOST)/sysroot --target=aarch64-linux-android26" \
 		cargo ndk -t arm64-v8a build --release -p oubli-bridge
 	mkdir -p android/app/src/main/jniLibs/arm64-v8a
 	cp target/aarch64-linux-android/release/liboubli_bridge.so android/app/src/main/jniLibs/arm64-v8a/
