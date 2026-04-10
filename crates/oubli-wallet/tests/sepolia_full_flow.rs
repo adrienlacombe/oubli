@@ -5,116 +5,37 @@
 ///
 /// # Faucet architecture
 ///
-/// The faucet (S0, `OUBLI_TEST_MNEMONIC_A`) distributes STRK to test wallets via plain
-/// ERC-20 transfers using `SingleOwnerAccount` (starknet-rs). This bypasses WalletCore
-/// entirely, so the faucet's public token balance is preserved.
+/// The faucet (S0, `OUBLI_TEST_MNEMONIC_A`) distributes STRK to test wallets via
+/// paymaster-sponsored ERC-20 transfers. This bypasses WalletCore entirely, so the
+/// faucet's public token balance is preserved.
 ///
-/// **Do NOT create a `WalletCore` from the faucet mnemonic** unless deploying the account
-/// for the first time. WalletCore's auto-fund will sweep all public tokens into the Tongo
-/// privacy pool, making them unavailable for ERC-20 distribution.
+/// **Do NOT create a `WalletCore` from the faucet mnemonic** during normal test setup.
+/// WalletCore's auto-fund will sweep all public tokens into the Tongo privacy pool,
+/// making them unavailable for ERC-20 distribution.
 ///
 /// Run with:
 ///   set -a && . crates/oubli-wallet/tests/sepolia.env && set +a
 ///   cargo test -p oubli-wallet --test sepolia_full_flow -- --ignored --nocapture
+mod support;
+
 use oubli_store::MockPlatformStorage;
 use oubli_wallet::config::NetworkConfig;
 use oubli_wallet::core::WalletCore;
 use oubli_wallet::rpc::RpcClient;
 use serial_test::serial;
 use starknet_types_core::felt::Felt;
+use support::{
+    ensure_faucet_deployed_via_paymaster, faucet_starknet_address, faucet_transfer_via_paymaster,
+};
 
 /// 1 STRK = 10^18 wei
 const ONE_STRK: u128 = 1_000_000_000_000_000_000;
 
 // ── Helpers ───────────────────────────────────────────────────
 
-/// Derive the faucet's Starknet address without triggering auto-fund.
-fn faucet_starknet_address(config: &NetworkConfig) -> Felt {
-    use krusty_kms_client::starknet_rust::core::types::Felt as RsFelt;
-    use krusty_kms_client::starknet_rust::signers::SigningKey;
-
-    let mnemonic_a =
-        std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A");
-    let sk = krusty_kms::derive_private_key_with_coin_type(&mnemonic_a, 0, 0, 9004, None)
-        .expect("faucet key derivation failed");
-    let sk_rs = RsFelt::from_bytes_be(&sk.to_bytes_be());
-    let signing_key = SigningKey::from_secret_scalar(sk_rs);
-    let pub_key_rs = signing_key.verifying_key().scalar();
-
-    let class_hash_rs =
-        RsFelt::from_hex(&config.account_class_hash).expect("invalid account class hash");
-    let address_rs = krusty_kms_client::starknet_rust::core::utils::get_contract_address(
-        RsFelt::ZERO,
-        class_hash_rs,
-        &[RsFelt::ZERO, pub_key_rs, RsFelt::ONE],
-        RsFelt::ZERO,
-    );
-
-    Felt::from_bytes_be(&address_rs.to_bytes_be())
-}
-
-/// Send STRK from the faucet (OUBLI_TEST_MNEMONIC_A) to a target address via raw ERC-20 transfer.
+/// Send STRK from the faucet (OUBLI_TEST_MNEMONIC_A) to a target address via the paymaster.
 async fn faucet_strk(config: &NetworkConfig, to_address: &Felt, amount: u128) {
-    use krusty_kms_client::starknet_rust::accounts::{
-        Account, ExecutionEncoding, SingleOwnerAccount,
-    };
-    use krusty_kms_client::starknet_rust::core::types::{
-        BlockId, BlockTag, Call as RsCall, Felt as RsFelt,
-    };
-    use krusty_kms_client::starknet_rust::core::utils::get_selector_from_name;
-    use krusty_kms_client::starknet_rust::signers::{LocalWallet, SigningKey};
-
-    let mnemonic_a =
-        std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A as faucet");
-
-    let sk = krusty_kms::derive_private_key_with_coin_type(&mnemonic_a, 0, 0, 9004, None)
-        .expect("faucet key derivation failed");
-    let sk_rs = RsFelt::from_bytes_be(&sk.to_bytes_be());
-    let signing_key = SigningKey::from_secret_scalar(sk_rs);
-    let pub_key_rs = signing_key.verifying_key().scalar();
-
-    let class_hash_rs =
-        RsFelt::from_hex(&config.account_class_hash).expect("invalid account class hash");
-    let address_rs = krusty_kms_client::starknet_rust::core::utils::get_contract_address(
-        RsFelt::ZERO,
-        class_hash_rs,
-        &[RsFelt::ZERO, pub_key_rs, RsFelt::ONE],
-        RsFelt::ZERO,
-    );
-
-    let provider =
-        krusty_kms_client::create_provider(&config.rpc_url).expect("create_provider failed");
-    let signer = LocalWallet::from(signing_key);
-    let chain_id = {
-        let bytes = config.chain_id.as_bytes();
-        let mut buf = [0u8; 32];
-        let start = 32usize.saturating_sub(bytes.len());
-        buf[start..].copy_from_slice(bytes);
-        RsFelt::from_bytes_be(&buf)
-    };
-    let mut account = SingleOwnerAccount::new(
-        provider,
-        signer,
-        address_rs,
-        chain_id,
-        ExecutionEncoding::New,
-    );
-    account.set_block_id(BlockId::Tag(BlockTag::Latest));
-
-    let erc20 = RsFelt::from_hex(&config.token_contract).expect("invalid token contract");
-    let recipient = RsFelt::from_bytes_be(&to_address.to_bytes_be());
-    let call = RsCall {
-        to: erc20,
-        selector: get_selector_from_name("transfer").expect("selector"),
-        calldata: vec![recipient, RsFelt::from(amount), RsFelt::ZERO],
-    };
-
-    let result = account
-        .execute_v3(vec![call])
-        .send()
-        .await
-        .expect("faucet transfer failed");
-    let tx_hash = format!("{:#066x}", result.transaction_hash);
+    let tx_hash = faucet_transfer_via_paymaster(config, to_address, amount).await;
     eprintln!("  faucet_strk tx: {tx_hash}");
 
     wait_for_tx(config, &tx_hash).await;
@@ -135,11 +56,7 @@ async fn wait_for_tx(config: &NetworkConfig, tx_hash: &str) {
 
 /// Wait for auto-fund to deploy account and sweep STRK into Tongo pool.
 /// Returns the final Tongo balance.
-async fn wait_for_auto_fund(
-    wallet: &mut WalletCore,
-    config: &NetworkConfig,
-    label: &str,
-) -> u128 {
+async fn wait_for_auto_fund(wallet: &mut WalletCore, config: &NetworkConfig, label: &str) -> u128 {
     let rpc = RpcClient::new(config).expect("RpcClient");
     let class_hash =
         Felt::from_hex(&config.account_class_hash).expect("invalid account class hash");
@@ -229,9 +146,8 @@ async fn retry_paymaster_op(
 
 /// Deploy faucet account via paymaster if not already deployed.
 async fn ensure_faucet_deployed(config: &NetworkConfig) {
-    let faucet_addr = faucet_starknet_address(config);
-    let faucet_hex = format!("{:#066x}", faucet_addr);
     let rpc = RpcClient::new(config).expect("RpcClient");
+    let faucet_addr = faucet_starknet_address(config);
     let class_hash =
         Felt::from_hex(&config.account_class_hash).expect("invalid account class hash");
     let deployed = rpc
@@ -241,21 +157,11 @@ async fn ensure_faucet_deployed(config: &NetworkConfig) {
 
     if !deployed {
         eprintln!("=== Deploying faucet account via paymaster");
-        let faucet_mnemonic =
-            std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A");
-        let mut faucet_wallet = make_wallet(&faucet_mnemonic, config, "S0 Faucet").await;
-
-        let faucet_tongo_bal = wait_for_auto_fund(&mut faucet_wallet, config, "S0").await;
-        eprintln!("  Faucet Tongo balance after auto-fund: {faucet_tongo_bal}");
-
-        eprintln!("  Ragequit to recover public token...");
-        let tx = faucet_wallet
-            .handle_ragequit_op(&faucet_hex)
-            .await
-            .expect("faucet ragequit failed");
-        eprintln!("  Faucet ragequit tx: {tx}");
-        wait_for_tx(config, &tx).await;
-        eprintln!("  Faucet deployed and token recovered");
+        if let Some(tx_hash) = ensure_faucet_deployed_via_paymaster(config).await {
+            eprintln!("  Faucet deploy tx: {tx_hash}");
+            wait_for_tx(config, &tx_hash).await;
+            eprintln!("  Faucet deployed");
+        }
     } else {
         eprintln!("  Faucet already deployed");
     }
@@ -409,7 +315,7 @@ async fn test_full_flow_sepolia() {
     // Wait for all transfers to confirm before rollovers
     wait_for_tx(&config, &tx).await; // S1→S5
     wait_for_tx(&config, &s3_tx).await; // S3→S5
-    // Sync S1 so its cipher balance is up-to-date for later operations
+                                        // Sync S1 so its cipher balance is up-to-date for later operations
     s1.handle_refresh_balance().await.ok();
 
     // ── Phase 3C: Rollovers ──────────────────────────────────
@@ -418,7 +324,10 @@ async fn test_full_flow_sepolia() {
     // S2 rollover (received from S1) — auto-rollover handles it via handle_refresh_balance
     eprintln!("  Waiting for S2 rollover (auto)...");
     let s2_bal_after_rollover = wait_for_rollover(&mut s2, "S2").await;
-    assert!(s2_bal_after_rollover > s2_bal, "S2 balance should increase after rollover");
+    assert!(
+        s2_bal_after_rollover > s2_bal,
+        "S2 balance should increase after rollover"
+    );
 
     // S5 rollover (received from S1 + S3) — auto-rollover handles it
     eprintln!("  Waiting for S5 rollover (auto)...");
@@ -446,7 +355,10 @@ async fn test_full_flow_sepolia() {
             eprintln!("  S1: balance increased {s1_bal_before} → {bal} after {attempt} attempts");
             break;
         }
-        assert!(attempt < 24, "S1 balance never increased after S2→S1 transfer");
+        assert!(
+            attempt < 24,
+            "S1 balance never increased after S2→S1 transfer"
+        );
     }
 
     // ── Phase 3E: Withdraw ───────────────────────────────────
@@ -465,7 +377,10 @@ async fn test_full_flow_sepolia() {
     s3.handle_refresh_balance().await.ok();
     let s3_bal_after = s3.active_account().unwrap().balance;
     eprintln!("  S3 balance after withdraw: {s3_bal_after}");
-    assert!(s3_bal_after < s3_bal, "S3 balance should decrease after withdraw");
+    assert!(
+        s3_bal_after < s3_bal,
+        "S3 balance should decrease after withdraw"
+    );
 
     // ── Phase 3F: Ragequit ───────────────────────────────────
     eprintln!("\n=== Phase 3F: Ragequit");
@@ -488,7 +403,9 @@ async fn test_full_flow_sepolia() {
         s4.handle_refresh_balance().await.ok();
         let acct = s4.active_account().unwrap();
         if acct.balance == 0 && acct.pending == 0 {
-            eprintln!("  S4 Tongo balance=0, pending=0 — ragequit confirmed after {attempt} attempts");
+            eprintln!(
+                "  S4 Tongo balance=0, pending=0 — ragequit confirmed after {attempt} attempts"
+            );
             break;
         }
         assert!(attempt < 12, "S4 should be 0 after ragequit");
@@ -560,7 +477,11 @@ async fn test_full_flow_sepolia() {
     wait_for_tx(&config, &tx).await;
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     s4.handle_refresh_balance().await.ok();
-    assert_eq!(s4.active_account().unwrap().balance, 0, "S4 balance should be 0 after second ragequit");
+    assert_eq!(
+        s4.active_account().unwrap().balance,
+        0,
+        "S4 balance should be 0 after second ragequit"
+    );
     eprintln!("  S4 second ragequit confirmed");
 
     // ── Phase 5: Activity verification ───────────────────────
@@ -569,26 +490,56 @@ async fn test_full_flow_sepolia() {
     let s1_activity = s1.get_activity().await.expect("S1 get_activity failed");
     eprintln!("  S1 activity: {} events", s1_activity.len());
     for (i, ev) in s1_activity.iter().enumerate() {
-        eprintln!("    [{i}] type={} amount={:?} block={}", ev.event_type, ev.amount_sats, ev.block_number);
+        eprintln!(
+            "    [{i}] type={} amount={:?} block={}",
+            ev.event_type, ev.amount_sats, ev.block_number
+        );
     }
     assert!(!s1_activity.is_empty(), "S1 should have activity events");
     // S1 had: auto-fund, explicit fund, 2 transfers out, 1 transfer in, 1 rollover
-    let fund_events: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "Fund").collect();
+    let fund_events: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "Fund")
+        .collect();
     assert!(!fund_events.is_empty(), "S1 should have Fund events");
-    let transfer_out: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "TransferOut").collect();
-    assert!(!transfer_out.is_empty(), "S1 should have TransferOut events");
-    let transfer_in: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "TransferIn").collect();
+    let transfer_out: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "TransferOut")
+        .collect();
+    assert!(
+        !transfer_out.is_empty(),
+        "S1 should have TransferOut events"
+    );
+    let transfer_in: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "TransferIn")
+        .collect();
     assert!(!transfer_in.is_empty(), "S1 should have TransferIn events");
-    let rollover_events: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "Rollover").collect();
-    assert!(!rollover_events.is_empty(), "S1 should have Rollover events");
+    let rollover_events: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "Rollover")
+        .collect();
+    assert!(
+        !rollover_events.is_empty(),
+        "S1 should have Rollover events"
+    );
 
     let s4_activity = s4.get_activity().await.expect("S4 get_activity failed");
     eprintln!("  S4 activity: {} events", s4_activity.len());
     for (i, ev) in s4_activity.iter().enumerate() {
-        eprintln!("    [{i}] type={} amount={:?} block={}", ev.event_type, ev.amount_sats, ev.block_number);
+        eprintln!(
+            "    [{i}] type={} amount={:?} block={}",
+            ev.event_type, ev.amount_sats, ev.block_number
+        );
     }
-    let ragequit_events: Vec<_> = s4_activity.iter().filter(|e| e.event_type == "Ragequit").collect();
-    assert!(ragequit_events.len() >= 2, "S4 should have at least 2 Ragequit events");
+    let ragequit_events: Vec<_> = s4_activity
+        .iter()
+        .filter(|e| e.event_type == "Ragequit")
+        .collect();
+    assert!(
+        ragequit_events.len() >= 2,
+        "S4 should have at least 2 Ragequit events"
+    );
 
     // ── Phase 6: STRK recovery ───────────────────────────────
     eprintln!("\n=== Phase 6: STRK recovery to faucet");
@@ -645,10 +596,7 @@ async fn test_full_flow_sepolia() {
     eprintln!("  S4 send_token (public STRK from ragequit) → faucet");
     let token = Felt::from_hex(&config.token_contract).unwrap();
     let rpc = RpcClient::new(&config).unwrap();
-    let s4_public = rpc
-        .get_erc20_balance(&token, &s4_addr)
-        .await
-        .unwrap_or(0);
+    let s4_public = rpc.get_erc20_balance(&token, &s4_addr).await.unwrap_or(0);
     if s4_public > ONE_STRK / 10 {
         // Keep a small amount for gas, send rest back
         let send_amount = s4_public.saturating_sub(ONE_STRK / 100);
@@ -661,10 +609,7 @@ async fn test_full_flow_sepolia() {
     // S5: same as S4
     s5.handle_refresh_balance().await.ok();
     eprintln!("  S5 send_token (public STRK from ragequit) → faucet");
-    let s5_public = rpc
-        .get_erc20_balance(&token, &s5_addr)
-        .await
-        .unwrap_or(0);
+    let s5_public = rpc.get_erc20_balance(&token, &s5_addr).await.unwrap_or(0);
     if s5_public > ONE_STRK / 10 {
         let send_amount = s5_public.saturating_sub(ONE_STRK / 100);
         match s5.send_token(&faucet_addr, send_amount).await {
@@ -705,10 +650,111 @@ async fn test_withdraw_sepolia() {
 
     wallet.handle_refresh_balance().await.unwrap();
     let new_balance = wallet.active_account().unwrap().balance;
-    assert!(new_balance < balance, "balance should decrease after withdraw");
+    assert!(
+        new_balance < balance,
+        "balance should decrease after withdraw"
+    );
 
     // Cleanup: ragequit remaining to faucet
     if new_balance > 0 {
+        wallet.handle_ragequit_op(&faucet_hex).await.ok();
+    }
+}
+
+/// Focused test: external withdraw with app fee enabled.
+#[tokio::test]
+#[serial]
+#[ignore = "requires Sepolia env (source sepolia.env)"]
+async fn test_withdraw_with_fee_sepolia() {
+    let base_config = NetworkConfig::from_env();
+    ensure_faucet_deployed(&base_config).await;
+    let faucet_addr = faucet_starknet_address(&base_config);
+    let faucet_hex = format!("{:#066x}", faucet_addr);
+
+    let collector_mnemonic = krusty_kms::generate_mnemonic(12).unwrap();
+    let mut collector = make_wallet(&collector_mnemonic, &base_config, "fee-collector").await;
+    let collector_pubkey = collector
+        .active_account()
+        .unwrap()
+        .owner_public_key_hex
+        .clone();
+
+    let mut fee_config = base_config.clone();
+    fee_config.fee_percent = 1.0;
+    fee_config.fee_collector_pubkey = Some(collector_pubkey);
+
+    let mnemonic = krusty_kms::generate_mnemonic(12).unwrap();
+    let mut wallet = make_wallet(&mnemonic, &fee_config, "withdraw-fee-test").await;
+    let addr = wallet.active_account().unwrap().starknet_address;
+
+    faucet_strk(&fee_config, &addr, ONE_STRK).await;
+    let balance_before = wait_for_auto_fund(&mut wallet, &fee_config, "withdraw-fee-test").await;
+    assert!(balance_before > 0);
+
+    let rpc = RpcClient::new(&fee_config).unwrap();
+    let token_contract = Felt::from_hex(&fee_config.token_contract).unwrap();
+    let rate = rpc.contract().get_rate().await.unwrap() as u128;
+    let faucet_public_before = rpc
+        .get_erc20_balance(&token_contract, &faucet_addr)
+        .await
+        .expect("get faucet balance before withdraw");
+
+    let amount_sats = "10";
+    let amount_units = oubli_wallet::sats_to_tongo_units(amount_sats).unwrap() as u128;
+    let fee_sats = oubli_wallet::calculate_fee_sats(
+        amount_sats.parse::<u64>().unwrap(),
+        fee_config.fee_percent,
+    );
+    let fee_units = oubli_wallet::sats_to_tongo_units(&fee_sats.to_string()).unwrap() as u128;
+
+    let tx = retry_paymaster_op(
+        &mut wallet,
+        "withdraw-fee-test",
+        3,
+        "withdraw",
+        amount_sats,
+        &faucet_hex,
+    )
+    .await;
+    eprintln!("withdraw with fee tx: {tx}");
+    wait_for_tx(&fee_config, &tx).await;
+
+    wallet.handle_refresh_balance().await.unwrap();
+    let sender_after = wallet.active_account().unwrap().balance;
+    assert_eq!(
+        sender_after,
+        balance_before - amount_units - fee_units,
+        "sender balance should decrease by withdraw amount plus fee"
+    );
+
+    let faucet_public_after = rpc
+        .get_erc20_balance(&token_contract, &faucet_addr)
+        .await
+        .expect("get faucet balance after withdraw");
+    assert_eq!(
+        faucet_public_after,
+        faucet_public_before + (amount_units * rate),
+        "public recipient should only receive the withdraw amount"
+    );
+
+    let mut collector_balance = 0;
+    for attempt in 1..=12 {
+        collector.handle_refresh_balance().await.ok();
+        collector_balance = collector.active_account().unwrap().balance;
+        if collector_balance >= fee_units {
+            eprintln!(
+                "  fee-collector: credited after {attempt} attempts, balance={collector_balance}"
+            );
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    assert_eq!(
+        collector_balance, fee_units,
+        "collector should receive the fee privately"
+    );
+
+    if sender_after > 0 {
         wallet.handle_ragequit_op(&faucet_hex).await.ok();
     }
 }
@@ -750,7 +796,10 @@ async fn test_send_token_sepolia() {
         .expect("get_erc20_balance failed");
     eprintln!("wallet public STRK after send_token: {wallet_public}");
     // Should have less than 2 STRK (sent 1 back)
-    assert!(wallet_public < 2 * ONE_STRK, "wallet should have <2 STRK after sending 1 back");
+    assert!(
+        wallet_public < 2 * ONE_STRK,
+        "wallet should have <2 STRK after sending 1 back"
+    );
 
     // Cleanup: ragequit Tongo balance to faucet
     let faucet_hex = format!("{:#066x}", faucet_addr);

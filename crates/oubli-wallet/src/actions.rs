@@ -10,9 +10,15 @@ pub enum UserAction {
     /// Fund the account (deposit).
     Fund { amount_sats: String },
     /// Transfer to another Tongo user.
-    Transfer { amount_sats: String, recipient_pub_key: String },
+    Transfer {
+        amount_sats: String,
+        recipient_pub_key: String,
+    },
     /// Withdraw to an L1 address.
-    Withdraw { amount_sats: String, recipient_address: String },
+    Withdraw {
+        amount_sats: String,
+        recipient_address: String,
+    },
     /// Rollover pending balance.
     Rollover,
     /// Rage-quit: withdraw everything.

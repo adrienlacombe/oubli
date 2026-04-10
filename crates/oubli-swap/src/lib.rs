@@ -113,10 +113,7 @@ impl SwapEngine {
     /// Create a WBTC → BTCLN swap (pay a Lightning invoice).
     /// Locks WBTC in escrow; LP pays the Lightning invoice.
     /// Returns a quote with input_amount (WBTC needed).
-    pub async fn create_wbtc_to_btc_ln(
-        &self,
-        bolt11: &str,
-    ) -> Result<SwapQuote, SwapError> {
+    pub async fn create_wbtc_to_btc_ln(&self, bolt11: &str) -> Result<SwapQuote, SwapError> {
         let result_json = self
             .runtime
             .call_js_fn("createWbtcToBtcLnSwap", &[bolt11])
@@ -145,10 +142,7 @@ impl SwapEngine {
 
     /// Execute a pending swap (sign and submit Starknet transactions).
     pub async fn execute_swap(&self, swap_id: &str) -> Result<(), SwapError> {
-        let result_json = self
-            .runtime
-            .call_js_fn("executeSwap", &[swap_id])
-            .await?;
+        let result_json = self.runtime.call_js_fn("executeSwap", &[swap_id]).await?;
         let result: serde_json::Value = serde_json::from_str(&result_json)?;
         if result.get("ok") != Some(&serde_json::Value::Bool(true)) {
             let err = result
@@ -162,10 +156,7 @@ impl SwapEngine {
 
     /// Get the status of a swap.
     pub async fn get_swap_status(&self, swap_id: &str) -> Result<SwapStatus, SwapError> {
-        let result_json = self
-            .runtime
-            .call_js_fn("getSwapStatus", &[swap_id])
-            .await?;
+        let result_json = self.runtime.call_js_fn("getSwapStatus", &[swap_id]).await?;
         let result: serde_json::Value = serde_json::from_str(&result_json)?;
         if result.get("ok") != Some(&serde_json::Value::Bool(true)) {
             let err = result
@@ -174,9 +165,8 @@ impl SwapEngine {
                 .unwrap_or("unknown error");
             return Err(SwapError::SwapFailed(err.to_string()));
         }
-        let status: SwapStatus = serde_json::from_value(
-            result.get("status").cloned().unwrap_or_default(),
-        )?;
+        let status: SwapStatus =
+            serde_json::from_value(result.get("status").cloned().unwrap_or_default())?;
         Ok(status)
     }
 
@@ -191,27 +181,20 @@ impl SwapEngine {
                 .unwrap_or("unknown error");
             return Err(SwapError::SwapFailed(err.to_string()));
         }
-        let swaps: Vec<SwapSummary> = serde_json::from_value(
-            result.get("swaps").cloned().unwrap_or_default(),
-        )?;
+        let swaps: Vec<SwapSummary> =
+            serde_json::from_value(result.get("swaps").cloned().unwrap_or_default())?;
         Ok(swaps)
     }
 
     /// Get swap limits for a given direction.
-    pub async fn get_swap_limits(
-        &self,
-        direction: SwapDirection,
-    ) -> Result<SwapLimits, SwapError> {
+    pub async fn get_swap_limits(&self, direction: SwapDirection) -> Result<SwapLimits, SwapError> {
         let dir_str = match direction {
             SwapDirection::BtcToWbtc => "btc_to_wbtc",
             SwapDirection::WbtcToBtc => "wbtc_to_btc",
-            SwapDirection::LnToWbtc => "btc_to_wbtc",       // same limits
-            SwapDirection::WbtcToBtcLn => "wbtc_to_btc",    // same limits as wbtc→btc
+            SwapDirection::LnToWbtc => "btc_to_wbtc", // same limits
+            SwapDirection::WbtcToBtcLn => "wbtc_to_btc", // same limits as wbtc→btc
         };
-        let result_json = self
-            .runtime
-            .call_js_fn("getSwapLimits", &[dir_str])
-            .await?;
+        let result_json = self.runtime.call_js_fn("getSwapLimits", &[dir_str]).await?;
         let result: serde_json::Value = serde_json::from_str(&result_json)?;
         if result.get("ok") != Some(&serde_json::Value::Bool(true)) {
             let err = result
@@ -220,9 +203,8 @@ impl SwapEngine {
                 .unwrap_or("unknown error");
             return Err(SwapError::SwapFailed(err.to_string()));
         }
-        let limits: SwapLimits = serde_json::from_value(
-            result.get("limits").cloned().unwrap_or_default(),
-        )?;
+        let limits: SwapLimits =
+            serde_json::from_value(result.get("limits").cloned().unwrap_or_default())?;
         Ok(limits)
     }
 

@@ -19,6 +19,7 @@ struct OnboardingView: View {
     @State private var disclaimerAccepted: Bool = false
     @State private var copiedToClipboard: Bool = false
     @State private var toastMessage: String? = nil
+    @State private var showClipboardWarning: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +50,7 @@ struct OnboardingView: View {
                     .padding(.bottom, 32)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear {
+                        UIAccessibility.post(notification: .announcement, argument: message)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                             withAnimation { toastMessage = nil }
                         }
@@ -66,28 +68,42 @@ struct OnboardingView: View {
 
             Image(systemName: "bitcoinsign.circle.fill")
                 .font(.system(size: 80))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.oubliSecondary)
+                .accessibilityHidden(true)
 
             Text("Welcome to Oubli")
                 .font(.title)
                 .fontWeight(.bold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Your keys. Your Bitcoin. Secured by Starknet.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
             Spacer()
 
-            Button {
-                step = .disclaimer
-            } label: {
-                Text("Get Started")
-                    .frame(maxWidth: .infinity)
+            VStack(spacing: 12) {
+                Button {
+                    step = .disclaimer
+                } label: {
+                    Text("Get Started")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    step = .restoreMnemonic
+                } label: {
+                    Text("I already have a wallet")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(Color.oubliPrimary)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
@@ -99,33 +115,41 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.orange)
+            VStack(spacing: 20) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(Color.oubliSecondary)
+                    .accessibilityHidden(true)
 
-            Text("You Are in Control")
-                .font(.title2)
-                .fontWeight(.semibold)
+                Text("You Are in Control")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
 
-            Text("Oubli is a self-custodial wallet. You alone hold your private keys. No one \u{2014} not even Oubli \u{2014} can recover your funds if you lose your seed phrase. Make sure to back it up and store it safely.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                Text("Oubli is a self-custodial wallet. You alone hold your private keys. No one \u{2014} not even Oubli \u{2014} can recover your funds if you lose your seed phrase. Make sure to back it up and store it safely.")
+                    .font(.body)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
+                    .multilineTextAlignment(.center)
 
-            Button {
-                disclaimerAccepted.toggle()
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: disclaimerAccepted ? "checkmark.square.fill" : "square")
-                        .foregroundColor(disclaimerAccepted ? .accentColor : .secondary)
-                    Text("I understand that I am responsible for keeping my seed phrase safe.")
-                        .font(.footnote)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
+                Button {
+                    disclaimerAccepted.toggle()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: disclaimerAccepted ? "checkmark.square.fill" : "square")
+                            .foregroundColor(disclaimerAccepted ? Color.oubliPrimary : Color.oubliOnSurfaceVariant)
+                        Text("I understand that I am responsible for keeping my seed phrase safe.")
+                            .font(.footnote)
+                            .foregroundColor(Color.oubliOnSurface)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
+                .accessibilityLabel("Disclaimer acknowledgment")
+                .accessibilityValue(disclaimerAccepted ? "Accepted" : "Not accepted")
+                .accessibilityHint("Double tap to toggle")
             }
-            .padding(.horizontal, 32)
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 24)
 
             Spacer()
 
@@ -152,10 +176,11 @@ struct OnboardingView: View {
             Text("Set Up Your Wallet")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Create a new wallet or restore an existing one from your seed phrase.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -193,22 +218,18 @@ struct OnboardingView: View {
                 Text("Your Seed Phrase")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("Write down these words in order. You will need them to recover your wallet.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
 
                 mnemonicGrid
 
                 Button {
-                    UIPasteboard.general.string = mnemonic
-                    copiedToClipboard = true
-                    withAnimation { toastMessage = "Copied to clipboard" }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        copiedToClipboard = false
-                    }
+                    showClipboardWarning = true
                 } label: {
                     Label(copiedToClipboard ? "Copied!" : "Copy to Clipboard", systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
                         .frame(maxWidth: .infinity)
@@ -216,6 +237,21 @@ struct OnboardingView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
                 .padding(.horizontal, 24)
+                .accessibilityHint("Copies seed phrase to clipboard")
+                .alert("Clipboard Warning", isPresented: $showClipboardWarning) {
+                    Button("Copy Anyway", role: .destructive) {
+                        UIPasteboard.general.string = mnemonic
+                        copiedToClipboard = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        withAnimation { toastMessage = "Copied to clipboard" }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            copiedToClipboard = false
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Your seed phrase will be copied to the clipboard, where other apps may be able to read it. Only do this if you intend to paste it immediately and clear your clipboard afterward.")
+                }
 
                 warningBanner
 
@@ -240,23 +276,24 @@ struct OnboardingView: View {
             columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible()),
-                GridItem(.flexible()),
             ],
             spacing: 12
         ) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack(spacing: 4) {
-                    Text("\(index + 1).")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(width: 24, alignment: .trailing)
+                    Text(String(format: "%02d.", index + 1))
+                        .font(.caption.monospaced())
+                        .foregroundColor(Color.oubliOnSurfaceVariant)
+                        .frame(width: 28, alignment: .trailing)
                     Text(word)
                         .font(.body.monospaced())
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 8)
-                .background(Color(.systemGray6))
+                .background(Color.oubliSurfaceContainerHigh)
                 .cornerRadius(8)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Word \(index + 1): \(word)")
             }
         }
         .padding(.horizontal, 24)
@@ -265,15 +302,16 @@ struct OnboardingView: View {
     private var warningBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.shield.fill")
-                .foregroundColor(.orange)
+                .foregroundColor(Color.oubliSecondary)
                 .font(.title3)
+                .accessibilityHidden(true)
 
             Text("Never share your seed phrase. Anyone who has it can steal your funds.")
                 .font(.footnote)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color.oubliSurfaceContainerHigh)
         .cornerRadius(12)
         .padding(.horizontal, 24)
     }
@@ -286,10 +324,11 @@ struct OnboardingView: View {
                 Text("Restore Wallet")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("Enter your 12-word seed phrase, separated by spaces.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
 
@@ -297,16 +336,22 @@ struct OnboardingView: View {
                     .font(.body.monospaced())
                     .frame(minHeight: 120)
                     .padding(12)
-                    .background(Color(.systemGray6))
+                    .background(Color.oubliSurfaceContainerHigh)
                     .cornerRadius(12)
                     .padding(.horizontal, 24)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Seed phrase input")
 
                 if let error = mnemonicValidationError {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundColor(.red)
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(Color.oubliError)
+                            .accessibilityHidden(true)
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundColor(Color.oubliError)
+                    }
                 }
 
                 Button {
@@ -340,6 +385,7 @@ struct OnboardingView: View {
             viewModel.completeOnboarding(mnemonic: trimmed)
         } else {
             mnemonicValidationError = "Invalid seed phrase. Please check your words and try again."
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
 }

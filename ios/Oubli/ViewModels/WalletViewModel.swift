@@ -16,10 +16,12 @@ final class WalletViewModel: ObservableObject {
 
     @Published private(set) var stateInfo: WalletStateInfo
     @Published var isBalanceHidden: Bool = false
-    @Published var showUsd: Bool = false
-    @Published private(set) var btcPriceUsd: Double? = nil
+    @Published var showFiat: Bool = false
+    @Published var fiatCurrency: String = UserDefaults.standard.string(forKey: "oubli_fiat_currency") ?? "usd"
+    @Published private(set) var btcFiatPrice: Double? = nil
     @Published private(set) var initError: String?
     @Published private(set) var activity: [ActivityEventFfi] = []
+    @Published private(set) var contacts: [ContactFfi] = []
     @Published private(set) var biometricUnlockError: String?
 
     // MARK: - Core
@@ -56,24 +58,26 @@ final class WalletViewModel: ObservableObject {
             autoFundError: nil
         )
 
-        initializeWallet(storage: storage)
+        initializeWallet()
     }
 
-    private func initializeWallet(storage: PlatformStorageCallback) {
-        backgroundQueue.async { [weak self] in
+    private func initializeWallet() {
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
             do {
-                let w = try OubliWallet(storage: storage)
+                let w = try OubliWallet(storage: self.storage, rpcUrl: nil, paymasterApiKey: nil)
                 let state = w.getState()
-                Task { @MainActor [weak self] in
-                    self?.wallet = w
-                    self?.applyState(state)
+                Task { @MainActor in
+                    self.wallet = w
+                    self.applyState(state)
                 }
             } catch {
-                Task { @MainActor [weak self] in
-                    self?.initError = error.localizedDescription
+                Task { @MainActor in
+                    self.initError = error.localizedDescription
                 }
             }
         }
+        backgroundQueue.async(execute: workItem)
     }
 
     // MARK: - State refresh
@@ -89,6 +93,7 @@ final class WalletViewModel: ObservableObject {
         let shouldPoll = stateInfo.state == .ready || stateInfo.state == .processing
         if shouldPoll && activityTimer == nil {
             refreshBtcPrice()
+            loadContacts()
             activityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.loadActivity()
@@ -201,6 +206,8 @@ final class WalletViewModel: ObservableObject {
             try wallet.handleCompleteOnboarding(mnemonic: mnemonic)
         }
         loadActivity()
+        loadContacts()
+        refreshBtcPrice()
     }
 
     // MARK: - Unlock
@@ -221,6 +228,7 @@ final class WalletViewModel: ObservableObject {
                     self?.applyState(newState)
                     self?.activity = cached
                     self?.biometricUnlockError = nil
+                    self?.refreshBtcPrice()
                 }
             } catch {
                 let message = Self.biometricUnlockErrorMessage(from: error)
@@ -229,6 +237,23 @@ final class WalletViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Fee
+
+    func calculateFee(amountSats: String) -> String {
+        guard let w = wallet else { return "0" }
+        return w.calculateFee(amountSats: amountSats)
+    }
+
+    func calculateSendFee(amountSats: String, recipient: String) -> String {
+        guard let w = wallet else { return "0" }
+        return w.calculateSendFee(amountSats: amountSats, recipient: recipient)
+    }
+
+    func feePercent() -> Double {
+        guard let w = wallet else { return 0.0 }
+        return w.getFeePercent()
     }
 
     // MARK: - Operations
@@ -330,26 +355,152 @@ final class WalletViewModel: ObservableObject {
         }
     }
 
-    func refreshBtcPrice() {
+    // MARK: - Contacts
+
+    func loadContacts() {
         guard let wallet = wallet else { return }
         backgroundQueue.async { [weak self] in
-            let price = wallet.getBtcPriceUsd()
+            let list = wallet.getContacts()
+            Task { @MainActor [weak self] in
+                self?.contacts = list
+            }
+        }
+    }
+
+    func saveContact(_ contact: ContactFfi) {
+        guard let wallet = wallet else { return }
+        backgroundQueue.async { [weak self] in
+            _ = try? wallet.saveContact(contact: contact)
+            let list = wallet.getContacts()
+            Task { @MainActor [weak self] in
+                self?.contacts = list
+            }
+        }
+    }
+
+    func deleteContact(id: String) {
+        guard let wallet = wallet else { return }
+        backgroundQueue.async { [weak self] in
+            try? wallet.deleteContact(contactId: id)
+            let list = wallet.getContacts()
+            Task { @MainActor [weak self] in
+                self?.contacts = list
+            }
+        }
+    }
+
+    func findContactByAddress(_ address: String) -> ContactFfi? {
+        wallet?.findContactByAddress(address: address)
+    }
+
+    func updateContactLastUsed(id: String) {
+        guard let wallet = wallet else { return }
+        backgroundQueue.async { [weak self] in
+            try? wallet.updateContactLastUsed(contactId: id)
+            let list = wallet.getContacts()
+            Task { @MainActor [weak self] in
+                self?.contacts = list
+            }
+        }
+    }
+
+    func getTransferRecipient(txHash: String) -> String? {
+        wallet?.getTransferRecipient(txHash: txHash)
+    }
+
+    func refreshBtcPrice() {
+        guard let wallet = wallet else { return }
+        let currency = fiatCurrency
+        backgroundQueue.async { [weak self] in
+            let price = wallet.getBtcPrice(currency: currency)
             Task { @MainActor [weak self] in
                 if let price = price {
-                    self?.btcPriceUsd = price
+                    self?.btcFiatPrice = price
                 }
             }
         }
     }
 
-    func satsToUsd(_ sats: String) -> String? {
-        guard let price = btcPriceUsd,
+    func setFiatCurrency(_ code: String) {
+        fiatCurrency = code.lowercased()
+        UserDefaults.standard.set(fiatCurrency, forKey: "oubli_fiat_currency")
+        btcFiatPrice = nil
+        refreshBtcPrice()
+    }
+
+    /// Format sats as fiat using the cached BTC price.
+    func satsToFiat(_ sats: String) -> String? {
+        guard let price = btcFiatPrice,
               let satsVal = Double(sats) else { return nil }
-        let usd = satsVal * price / 100_000_000.0
-        if usd < 0.01 {
-            return String(format: "$%.4f", usd)
+        let fiat = satsVal * price / 100_000_000.0
+        let symbol = Self.fiatSymbol(for: fiatCurrency)
+        if fiat < 0.01 {
+            return String(format: "\(symbol)%.4f", fiat)
         }
-        return String(format: "$%.2f", usd)
+        return String(format: "\(symbol)%.2f", fiat)
+    }
+
+    /// Raw numeric fiat value (no symbol) for a given sats amount.
+    func satsToFiatRaw(_ sats: String) -> String? {
+        guard let price = btcFiatPrice,
+              let satsVal = Double(sats), satsVal > 0 else { return nil }
+        let fiat = satsVal * price / 100_000_000.0
+        if fiat < 0.01 {
+            return String(format: "%.4f", fiat)
+        }
+        return String(format: "%.2f", fiat)
+    }
+
+    /// Convert a fiat amount string to sats (rounded to nearest integer).
+    func fiatToSats(_ fiat: String) -> String? {
+        guard let price = btcFiatPrice, price > 0,
+              let fiatVal = Double(fiat), fiatVal > 0 else { return nil }
+        let sats = fiatVal / price * 100_000_000.0
+        return String(Int(sats.rounded()))
+    }
+
+    static let supportedFiatCurrencies: [(code: String, name: String)] = [
+        ("usd", "US Dollar"),
+        ("eur", "Euro"),
+        ("gbp", "British Pound"),
+        ("jpy", "Japanese Yen"),
+        ("cad", "Canadian Dollar"),
+        ("aud", "Australian Dollar"),
+        ("chf", "Swiss Franc"),
+        ("cny", "Chinese Yuan"),
+        ("inr", "Indian Rupee"),
+        ("brl", "Brazilian Real"),
+        ("krw", "Korean Won"),
+        ("mxn", "Mexican Peso"),
+        ("try", "Turkish Lira"),
+        ("sek", "Swedish Krona"),
+        ("nok", "Norwegian Krone"),
+        ("dkk", "Danish Krone"),
+        ("pln", "Polish Zloty"),
+        ("zar", "South African Rand"),
+        ("thb", "Thai Baht"),
+        ("sgd", "Singapore Dollar"),
+        ("hkd", "Hong Kong Dollar"),
+        ("nzd", "New Zealand Dollar"),
+    ]
+
+    static func fiatSymbol(for code: String) -> String {
+        switch code.lowercased() {
+        case "usd", "cad", "aud", "nzd", "sgd", "hkd", "mxn": return "$"
+        case "eur": return "€"
+        case "gbp": return "£"
+        case "jpy", "cny": return "¥"
+        case "inr": return "₹"
+        case "brl": return "R$"
+        case "krw": return "₩"
+        case "try": return "₺"
+        case "sek", "nok", "dkk": return "kr "
+        case "pln": return "zł "
+        case "zar": return "R "
+        case "thb": return "฿"
+        case "chf": return "CHF "
+        default: return "\(code.uppercased()) "
+        }
     }
 
     // MARK: - Seed Backup
@@ -404,18 +555,6 @@ final class WalletViewModel: ObservableObject {
         }
     }
 
-    // MARK: - RPC URL (Debug Settings)
-
-    func getRpcUrl() -> String {
-        guard let wallet = wallet else { return "" }
-        return wallet.getRpcUrl()
-    }
-
-    func updateRpcUrl(_ url: String) {
-        guard let wallet = wallet else { return }
-        wallet.updateRpcUrl(url: url)
-    }
-
     // MARK: - Error dismissal
 
     func dismissError() {
@@ -442,7 +581,7 @@ final class WalletViewModel: ObservableObject {
             errorMessage: nil,
             autoFundError: nil
         )
-        initializeWallet(storage: storage)
+        initializeWallet()
     }
 
     nonisolated private static func biometricUnlockErrorMessage(from error: Error) -> String {
@@ -469,7 +608,7 @@ final class WalletViewModel: ObservableObject {
             return "Authentication was canceled. Try again."
         }
         if lowercased.contains("locked out") {
-            return "Biometric authentication is temporarily locked. Use your device passcode, then try again."
+            return "Biometric authentication is temporarily locked. Wait a moment, then try again."
         }
         if lowercased.contains("not available") {
             return "Biometric authentication is unavailable right now. Try again."

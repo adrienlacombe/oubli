@@ -24,6 +24,7 @@ struct ContentView: View {
                     .padding(.bottom, 32)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear {
+                        UIAccessibility.post(notification: .announcement, argument: message)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                             withAnimation { toastMessage = nil }
                         }
@@ -65,16 +66,18 @@ struct ContentView: View {
         VStack(spacing: 24) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 56))
-                .foregroundColor(.red)
+                .foregroundStyle(Color.oubliError)
+                .accessibilityHidden(true)
 
             Text("Something went wrong")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             if let message = viewModel.errorMessage {
                 Text(message)
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                     .textSelection(.enabled)
@@ -84,6 +87,7 @@ struct ContentView: View {
                 if let message = viewModel.errorMessage {
                     Button {
                         UIPasteboard.general.string = message
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         withAnimation { toastMessage = "Copied to clipboard" }
                     } label: {
                         Label("Copy Error", systemImage: "doc.on.doc")
@@ -106,15 +110,17 @@ struct ContentView: View {
 
             Image(systemName: "trash.fill")
                 .font(.system(size: 56))
-                .foregroundColor(.red)
+                .foregroundStyle(Color.oubliError)
+                .accessibilityHidden(true)
 
             Text("Wallet Wiped")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("All data has been erased for your security.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -134,15 +140,17 @@ struct ContentView: View {
         VStack(spacing: 24) {
             Image(systemName: "xmark.octagon.fill")
                 .font(.system(size: 56))
-                .foregroundColor(.red)
+                .foregroundStyle(Color.oubliError)
+                .accessibilityHidden(true)
 
             Text("Initialization Failed")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text(message)
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
         }

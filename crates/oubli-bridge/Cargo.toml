@@ -16,6 +16,8 @@ oubli-backup = { workspace = true }
 krusty-kms = { workspace = true }
 uniffi = { workspace = true, features = ["cli"] }
 tokio = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [build-dependencies]

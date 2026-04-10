@@ -7,24 +7,29 @@
 ///
 /// # Faucet architecture
 ///
-/// The faucet (S0, `OUBLI_TEST_MNEMONIC_A`) distributes WBTC to test wallets via plain
-/// ERC-20 transfers using `SingleOwnerAccount` (starknet-rs). This bypasses WalletCore
-/// entirely, so the faucet's public WBTC balance is preserved.
+/// The faucet (S0, `OUBLI_TEST_MNEMONIC_A`) distributes WBTC to test wallets via
+/// paymaster-sponsored ERC-20 transfers. This bypasses WalletCore entirely, so the
+/// faucet's public WBTC balance is preserved.
 ///
-/// **Do NOT create a `WalletCore` from the faucet mnemonic** unless deploying the account
-/// for the first time. WalletCore's auto-fund will sweep all public WBTC into the Tongo
-/// privacy pool, making it unavailable for ERC-20 distribution. If this happens
-/// accidentally, use `test_recover_strk_mainnet` to ragequit the balance back to public.
+/// **Do NOT create a `WalletCore` from the faucet mnemonic** during normal test setup.
+/// WalletCore's auto-fund will sweep all public WBTC into the Tongo privacy pool,
+/// making it unavailable for ERC-20 distribution. If this happens accidentally, use
+/// `test_recover_strk_mainnet` to ragequit the balance back to public.
 ///
 /// Run with:
 ///   set -a && . crates/oubli-wallet/tests/mainnet.env && set +a
 ///   cargo test -p oubli-wallet --test mainnet_full_flow -- --ignored --nocapture
+mod support;
+
 use oubli_store::MockPlatformStorage;
 use oubli_wallet::config::NetworkConfig;
 use oubli_wallet::core::WalletCore;
 use oubli_wallet::rpc::RpcClient;
 use serial_test::serial;
 use starknet_types_core::felt::Felt;
+use support::{
+    ensure_faucet_deployed_via_paymaster, faucet_starknet_address, faucet_transfer_via_paymaster,
+};
 
 /// Base unit for test distributions.
 /// WBTC has 8 decimals; 1000 raw units = 1000 sats = 100 tongo units.
@@ -32,93 +37,9 @@ const TOKEN_UNIT: u128 = 1000;
 
 // ── Helpers ───────────────────────────────────────────────────
 
-/// Derive the faucet's Starknet address without triggering auto-fund.
-fn faucet_starknet_address(config: &NetworkConfig) -> Felt {
-    use krusty_kms_client::starknet_rust::core::types::Felt as RsFelt;
-    use krusty_kms_client::starknet_rust::signers::SigningKey;
-
-    let mnemonic_a =
-        std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A");
-    let sk = krusty_kms::derive_private_key_with_coin_type(&mnemonic_a, 0, 0, 9004, None)
-        .expect("faucet key derivation failed");
-    let sk_rs = RsFelt::from_bytes_be(&sk.to_bytes_be());
-    let signing_key = SigningKey::from_secret_scalar(sk_rs);
-    let pub_key_rs = signing_key.verifying_key().scalar();
-
-    let class_hash_rs =
-        RsFelt::from_hex(&config.account_class_hash).expect("invalid account class hash");
-    let address_rs = krusty_kms_client::starknet_rust::core::utils::get_contract_address(
-        RsFelt::ZERO,
-        class_hash_rs,
-        &[RsFelt::ZERO, pub_key_rs, RsFelt::ONE],
-        RsFelt::ZERO,
-    );
-
-    Felt::from_bytes_be(&address_rs.to_bytes_be())
-}
-
-/// Send WBTC from the faucet (OUBLI_TEST_MNEMONIC_A) to a target address via raw ERC-20 transfer.
+/// Send WBTC from the faucet (OUBLI_TEST_MNEMONIC_A) to a target address via the paymaster.
 async fn faucet_strk(config: &NetworkConfig, to_address: &Felt, amount: u128) {
-    use krusty_kms_client::starknet_rust::accounts::{
-        Account, ExecutionEncoding, SingleOwnerAccount,
-    };
-    use krusty_kms_client::starknet_rust::core::types::{
-        BlockId, BlockTag, Call as RsCall, Felt as RsFelt,
-    };
-    use krusty_kms_client::starknet_rust::core::utils::get_selector_from_name;
-    use krusty_kms_client::starknet_rust::signers::{LocalWallet, SigningKey};
-
-    let mnemonic_a =
-        std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A as faucet");
-
-    let sk = krusty_kms::derive_private_key_with_coin_type(&mnemonic_a, 0, 0, 9004, None)
-        .expect("faucet key derivation failed");
-    let sk_rs = RsFelt::from_bytes_be(&sk.to_bytes_be());
-    let signing_key = SigningKey::from_secret_scalar(sk_rs);
-    let pub_key_rs = signing_key.verifying_key().scalar();
-
-    let class_hash_rs =
-        RsFelt::from_hex(&config.account_class_hash).expect("invalid account class hash");
-    let address_rs = krusty_kms_client::starknet_rust::core::utils::get_contract_address(
-        RsFelt::ZERO,
-        class_hash_rs,
-        &[RsFelt::ZERO, pub_key_rs, RsFelt::ONE],
-        RsFelt::ZERO,
-    );
-
-    let provider =
-        krusty_kms_client::create_provider(&config.rpc_url).expect("create_provider failed");
-    let signer = LocalWallet::from(signing_key);
-    let chain_id = {
-        let bytes = config.chain_id.as_bytes();
-        let mut buf = [0u8; 32];
-        let start = 32usize.saturating_sub(bytes.len());
-        buf[start..].copy_from_slice(bytes);
-        RsFelt::from_bytes_be(&buf)
-    };
-    let mut account = SingleOwnerAccount::new(
-        provider,
-        signer,
-        address_rs,
-        chain_id,
-        ExecutionEncoding::New,
-    );
-    account.set_block_id(BlockId::Tag(BlockTag::Latest));
-
-    let erc20 = RsFelt::from_hex(&config.token_contract).expect("invalid token contract");
-    let recipient = RsFelt::from_bytes_be(&to_address.to_bytes_be());
-    let call = RsCall {
-        to: erc20,
-        selector: get_selector_from_name("transfer").expect("selector"),
-        calldata: vec![recipient, RsFelt::from(amount), RsFelt::ZERO],
-    };
-
-    let result = account
-        .execute_v3(vec![call])
-        .send()
-        .await
-        .expect("faucet transfer failed");
-    let tx_hash = format!("{:#066x}", result.transaction_hash);
+    let tx_hash = faucet_transfer_via_paymaster(config, to_address, amount).await;
     eprintln!("  faucet_strk tx: {tx_hash}");
 
     wait_for_tx(config, &tx_hash).await;
@@ -137,13 +58,9 @@ async fn wait_for_tx(config: &NetworkConfig, tx_hash: &str) {
     panic!("tx {tx_hash} was not confirmed in time");
 }
 
-/// Wait for auto-fund to deploy account and sweep STRK into Tongo pool.
+/// Wait for auto-fund to deploy the account and sweep public WBTC into the Tongo pool.
 /// Returns the final Tongo balance.
-async fn wait_for_auto_fund(
-    wallet: &mut WalletCore,
-    config: &NetworkConfig,
-    label: &str,
-) -> u128 {
+async fn wait_for_auto_fund(wallet: &mut WalletCore, config: &NetworkConfig, label: &str) -> u128 {
     let rpc = RpcClient::new(config).expect("RpcClient");
     let class_hash =
         Felt::from_hex(&config.account_class_hash).expect("invalid account class hash");
@@ -213,7 +130,10 @@ async fn wait_for_ragequit_settled(wallet: &mut WalletCore, label: &str) {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
     let acct = wallet.active_account().unwrap();
-    panic!("{label}: ragequit not settled, balance={}, pending={}", acct.balance, acct.pending);
+    panic!(
+        "{label}: ragequit not settled, balance={}, pending={}",
+        acct.balance, acct.pending
+    );
 }
 
 /// Retry a paymaster operation up to `max_retries` times with increasing delays.
@@ -239,10 +159,12 @@ async fn retry_paymaster_op(
             Ok(tx) => return tx,
             Err(e) => {
                 let msg = e.to_string();
-                if attempt < max_retries && msg.contains("rejected") {
-                    eprintln!("  {label}: {op_name} attempt {attempt}/{max_retries} rejected, retrying after delay...");
-                    tokio::time::sleep(std::time::Duration::from_secs(10 * attempt as u64)).await;
-                    wallet.handle_refresh_balance().await.ok();
+                let retryable = msg.contains("rejected")
+                    || msg.contains("Failed ZK proof")
+                    || msg.contains("Proof Of Ownership");
+                if attempt < max_retries && retryable {
+                    eprintln!("  {label}: {op_name} attempt {attempt}/{max_retries} failed ({msg}), retrying after delay...");
+                    tokio::time::sleep(std::time::Duration::from_secs(15 * attempt as u64)).await;
                 } else {
                     panic!("{label}: {op_name} failed after {attempt} attempts: {e}");
                 }
@@ -265,6 +187,29 @@ async fn make_wallet(mnemonic: &str, config: &NetworkConfig, label: &str) -> Wal
     wallet
 }
 
+async fn ensure_faucet_deployed(config: &NetworkConfig) {
+    let faucet_addr = faucet_starknet_address(config);
+    let rpc = RpcClient::new(config).expect("RpcClient");
+    let class_hash =
+        Felt::from_hex(&config.account_class_hash).expect("invalid account class hash");
+    let deployed = rpc
+        .is_account_deployed(&faucet_addr, &class_hash)
+        .await
+        .unwrap_or(false);
+
+    if deployed {
+        eprintln!("  Faucet already deployed");
+        return;
+    }
+
+    eprintln!("\n=== Phase 0: Deploying faucet account via paymaster");
+    if let Some(tx_hash) = ensure_faucet_deployed_via_paymaster(config).await {
+        eprintln!("  Faucet deploy tx: {tx_hash}");
+        wait_for_tx(config, &tx_hash).await;
+        eprintln!("  Faucet deployed");
+    }
+}
+
 // ── Main test ─────────────────────────────────────────────────
 
 #[tokio::test]
@@ -272,45 +217,17 @@ async fn make_wallet(mnemonic: &str, config: &NetworkConfig, label: &str) -> Wal
 #[ignore = "requires MAINNET env (source mainnet.env) — uses REAL WBTC"]
 async fn test_full_flow_mainnet() {
     let config = NetworkConfig::from_env();
-    assert_eq!(config.chain_id, "SN_MAIN", "this test must run against mainnet");
+    assert_eq!(
+        config.chain_id, "SN_MAIN",
+        "this test must run against mainnet"
+    );
 
     let faucet_addr = faucet_starknet_address(&config);
     let faucet_hex = format!("{:#066x}", faucet_addr);
     eprintln!("=== Faucet (S0): {faucet_hex}");
 
     // ── Phase 0: Deploy faucet if needed ─────────────────────
-    // On a fresh mainnet address the OZ account isn't deployed yet.
-    // Deploy via WalletCore (paymaster), then ragequit to recover public STRK.
-    let rpc_check = RpcClient::new(&config).expect("RpcClient");
-    let class_hash =
-        Felt::from_hex(&config.account_class_hash).expect("invalid account class hash");
-    let faucet_deployed = rpc_check
-        .is_account_deployed(&faucet_addr, &class_hash)
-        .await
-        .unwrap_or(false);
-
-    if !faucet_deployed {
-        eprintln!("\n=== Phase 0: Deploying faucet account via paymaster");
-        let faucet_mnemonic =
-            std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A");
-        let mut faucet_wallet = make_wallet(&faucet_mnemonic, &config, "S0 Faucet").await;
-
-        // Auto-fund will deploy + sweep STRK into Tongo
-        let faucet_tongo_bal = wait_for_auto_fund(&mut faucet_wallet, &config, "S0").await;
-        eprintln!("  Faucet Tongo balance after auto-fund: {faucet_tongo_bal}");
-
-        // Ragequit everything back to faucet's own Starknet address (public STRK)
-        eprintln!("  Ragequit to recover public STRK...");
-        let tx = faucet_wallet
-            .handle_ragequit_op(&faucet_hex)
-            .await
-            .expect("faucet ragequit failed");
-        eprintln!("  Faucet ragequit tx: {tx}");
-        wait_for_tx(&config, &tx).await;
-        eprintln!("  Faucet deployed and STRK recovered");
-    } else {
-        eprintln!("  Faucet already deployed");
-    }
+    ensure_faucet_deployed(&config).await;
 
     // ── Generate seeds ───────────────────────────────────────
     // Print mnemonics so STRK can be recovered if the test fails mid-run.
@@ -413,10 +330,10 @@ async fn test_full_flow_mainnet() {
     let s2_pk = pad_pubkey(&s2.active_account().unwrap().owner_public_key_hex);
     let s5_pk = pad_pubkey(&s5.active_account().unwrap().owner_public_key_hex);
 
-    // Allow state to settle after auto-fund before starting transfers
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    s1.handle_refresh_balance().await.ok();
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    // Allow state to settle after auto-fund before starting transfers.
+    // Do NOT call handle_refresh_balance() here — it can trigger another auto-fund
+    // which changes on-chain state and invalidates the transfer proof.
+    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
     eprintln!("  S1 → S2 transfer");
     let tx = retry_paymaster_op(&mut s1, "S1→S2", 3, "transfer", "10", &s2_pk).await;
@@ -424,9 +341,7 @@ async fn test_full_flow_mainnet() {
 
     // S1 → S5: wait for S1→S2 to confirm first (nonce + cipher sync)
     wait_for_tx(&config, &tx).await;
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    s1.handle_refresh_balance().await.ok();
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     eprintln!("  S1 → S5 transfer");
     let tx = retry_paymaster_op(&mut s1, "S1→S5", 3, "transfer", "10", &s5_pk).await;
     eprintln!("  S1→S5 tx: {tx}");
@@ -447,7 +362,10 @@ async fn test_full_flow_mainnet() {
     // Auto-rollover handles it via handle_refresh_balance
     eprintln!("  Waiting for S2 rollover (auto)...");
     let s2_bal_after_rollover = wait_for_rollover(&mut s2, "S2").await;
-    assert!(s2_bal_after_rollover > s2_bal, "S2 balance should increase after rollover");
+    assert!(
+        s2_bal_after_rollover > s2_bal,
+        "S2 balance should increase after rollover"
+    );
 
     eprintln!("  Waiting for S5 rollover (auto)...");
     let s5_bal_after_rollover = wait_for_rollover(&mut s5, "S5").await;
@@ -474,7 +392,10 @@ async fn test_full_flow_mainnet() {
             eprintln!("  S1: balance increased {s1_bal_before} → {bal} after {attempt} attempts");
             break;
         }
-        assert!(attempt < 36, "S1 balance never increased after S2→S1 transfer");
+        assert!(
+            attempt < 36,
+            "S1 balance never increased after S2→S1 transfer"
+        );
     }
 
     // ── Phase 3E: Withdraw ───────────────────────────────────
@@ -495,12 +416,17 @@ async fn test_full_flow_mainnet() {
         s3.handle_refresh_balance().await.ok();
         s3_bal_after = s3.active_account().unwrap().balance;
         if s3_bal_after < s3_bal {
-            eprintln!("  S3 balance after withdraw: {s3_bal_after} (settled after {attempt} refresh)");
+            eprintln!(
+                "  S3 balance after withdraw: {s3_bal_after} (settled after {attempt} refresh)"
+            );
             break;
         }
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
-    assert!(s3_bal_after < s3_bal, "S3 balance should decrease after withdraw");
+    assert!(
+        s3_bal_after < s3_bal,
+        "S3 balance should decrease after withdraw"
+    );
 
     // ── Phase 3F: Ragequit ───────────────────────────────────
     eprintln!("\n=== Phase 3F: Ragequit");
@@ -587,7 +513,10 @@ async fn test_full_flow_mainnet() {
     let mut s1_activity = Vec::new();
     for attempt in 1..=3 {
         match s1.get_activity().await {
-            Ok(a) => { s1_activity = a; break; }
+            Ok(a) => {
+                s1_activity = a;
+                break;
+            }
             Err(e) => {
                 eprintln!("  S1 get_activity attempt {attempt} failed: {e}");
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -596,23 +525,47 @@ async fn test_full_flow_mainnet() {
     }
     eprintln!("  S1 activity: {} events", s1_activity.len());
     for (i, ev) in s1_activity.iter().enumerate() {
-        eprintln!("    [{i}] type={} amount={:?} block={}", ev.event_type, ev.amount_sats, ev.block_number);
+        eprintln!(
+            "    [{i}] type={} amount={:?} block={}",
+            ev.event_type, ev.amount_sats, ev.block_number
+        );
     }
     assert!(!s1_activity.is_empty(), "S1 should have activity events");
-    let fund_events: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "Fund").collect();
+    let fund_events: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "Fund")
+        .collect();
     assert!(!fund_events.is_empty(), "S1 should have Fund events");
-    let transfer_out: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "TransferOut").collect();
-    assert!(!transfer_out.is_empty(), "S1 should have TransferOut events");
-    let transfer_in: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "TransferIn").collect();
+    let transfer_out: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "TransferOut")
+        .collect();
+    assert!(
+        !transfer_out.is_empty(),
+        "S1 should have TransferOut events"
+    );
+    let transfer_in: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "TransferIn")
+        .collect();
     assert!(!transfer_in.is_empty(), "S1 should have TransferIn events");
-    let rollover_events: Vec<_> = s1_activity.iter().filter(|e| e.event_type == "Rollover").collect();
-    assert!(!rollover_events.is_empty(), "S1 should have Rollover events");
+    let rollover_events: Vec<_> = s1_activity
+        .iter()
+        .filter(|e| e.event_type == "Rollover")
+        .collect();
+    assert!(
+        !rollover_events.is_empty(),
+        "S1 should have Rollover events"
+    );
 
     // Retry S4 activity — mainnet RPC can be flaky
     let mut s4_activity = Vec::new();
     for attempt in 1..=3 {
         match s4.get_activity().await {
-            Ok(a) => { s4_activity = a; break; }
+            Ok(a) => {
+                s4_activity = a;
+                break;
+            }
             Err(e) => {
                 eprintln!("  S4 get_activity attempt {attempt} failed: {e}");
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -621,10 +574,19 @@ async fn test_full_flow_mainnet() {
     }
     eprintln!("  S4 activity: {} events", s4_activity.len());
     for (i, ev) in s4_activity.iter().enumerate() {
-        eprintln!("    [{i}] type={} amount={:?} block={}", ev.event_type, ev.amount_sats, ev.block_number);
+        eprintln!(
+            "    [{i}] type={} amount={:?} block={}",
+            ev.event_type, ev.amount_sats, ev.block_number
+        );
     }
-    let ragequit_events: Vec<_> = s4_activity.iter().filter(|e| e.event_type == "Ragequit").collect();
-    assert!(ragequit_events.len() >= 2, "S4 should have at least 2 Ragequit events");
+    let ragequit_events: Vec<_> = s4_activity
+        .iter()
+        .filter(|e| e.event_type == "Ragequit")
+        .collect();
+    assert!(
+        ragequit_events.len() >= 2,
+        "S4 should have at least 2 Ragequit events"
+    );
 
     // ── Phase 6: WBTC recovery ───────────────────────────────
     eprintln!("\n=== Phase 6: WBTC recovery to faucet");
@@ -679,10 +641,7 @@ async fn test_full_flow_mainnet() {
     eprintln!("  S4 send_token (public STRK from ragequit) → faucet");
     let token = Felt::from_hex(&config.token_contract).unwrap();
     let rpc = RpcClient::new(&config).unwrap();
-    let s4_public = rpc
-        .get_erc20_balance(&token, &s4_addr)
-        .await
-        .unwrap_or(0);
+    let s4_public = rpc.get_erc20_balance(&token, &s4_addr).await.unwrap_or(0);
     if s4_public > TOKEN_UNIT / 10 {
         let send_amount = s4_public.saturating_sub(TOKEN_UNIT / 100);
         match s4.send_token(&faucet_addr, send_amount).await {
@@ -694,10 +653,7 @@ async fn test_full_flow_mainnet() {
     // S5: same as S4
     s5.handle_refresh_balance().await.ok();
     eprintln!("  S5 send_token (public STRK from ragequit) → faucet");
-    let s5_public = rpc
-        .get_erc20_balance(&token, &s5_addr)
-        .await
-        .unwrap_or(0);
+    let s5_public = rpc.get_erc20_balance(&token, &s5_addr).await.unwrap_or(0);
     if s5_public > TOKEN_UNIT / 10 {
         let send_amount = s5_public.saturating_sub(TOKEN_UNIT / 100);
         match s5.send_token(&faucet_addr, send_amount).await {
@@ -712,9 +668,9 @@ async fn test_full_flow_mainnet() {
 /// Test that `handle_send` with a Starknet address (withdraw from Tongo to L1 address)
 /// works end-to-end on mainnet.
 ///
-/// Flow: fresh wallet → faucet STRK → auto-fund (deploy + sweep into Tongo) →
+/// Flow: fresh wallet → faucet WBTC → auto-fund (deploy + sweep into Tongo) →
 ///       handle_send (withdraw) to faucet Starknet address → verify balance decreased
-///       and faucet received STRK.
+///       and faucet received WBTC.
 ///
 /// WARNING: Uses REAL WBTC! Budget: ~2000 sats (recovered at the end).
 ///
@@ -726,11 +682,13 @@ async fn test_full_flow_mainnet() {
 #[ignore = "requires MAINNET env (source mainnet.env) — uses REAL WBTC"]
 async fn test_send_withdraw_to_starknet_mainnet() {
     let config = NetworkConfig::from_env();
-    assert_eq!(config.chain_id, "SN_MAIN", "this test must run against mainnet");
+    assert_eq!(
+        config.chain_id, "SN_MAIN",
+        "this test must run against mainnet"
+    );
 
     let rpc = RpcClient::new(&config).expect("RpcClient");
-    let token_contract =
-        Felt::from_hex(&config.token_contract).expect("invalid token contract");
+    let token_contract = Felt::from_hex(&config.token_contract).expect("invalid token contract");
     let faucet_addr = faucet_starknet_address(&config);
     let faucet_hex = format!("{:#066x}", faucet_addr);
 
@@ -745,18 +703,21 @@ async fn test_send_withdraw_to_starknet_mainnet() {
     eprintln!("  Faucet → Sender (2000 sats)");
     faucet_strk(&config, &starknet_addr, 2 * TOKEN_UNIT).await;
 
-    // Auto-fund: deploy + sweep STRK into Tongo pool
+    // Auto-fund: deploy + sweep WBTC into the Tongo pool
     eprintln!("  Waiting for auto-fund...");
     let balance_before = wait_for_auto_fund(&mut wallet, &config, "Sender").await;
-    assert!(balance_before > 0, "should have Tongo balance after auto-fund");
+    assert!(
+        balance_before > 0,
+        "should have Tongo balance after auto-fund"
+    );
     eprintln!("  Tongo balance before withdraw: {balance_before}");
 
-    // Record faucet's STRK balance before withdraw
+    // Record faucet's WBTC balance before withdraw
     let faucet_strk_before = rpc
         .get_erc20_balance(&token_contract, &faucet_addr)
         .await
-        .expect("get faucet STRK balance");
-    eprintln!("  Faucet STRK before: {faucet_strk_before}");
+        .expect("get faucet WBTC balance");
+    eprintln!("  Faucet WBTC before: {faucet_strk_before}");
 
     // Send (withdraw) to faucet Starknet address via handle_send
     eprintln!("  handle_send (withdraw) → faucet");
@@ -776,15 +737,15 @@ async fn test_send_withdraw_to_starknet_mainnet() {
         "Tongo balance should decrease after withdraw (before={balance_before}, after={balance_after})"
     );
 
-    // Verify faucet received STRK
+    // Verify faucet received WBTC
     let faucet_strk_after = rpc
         .get_erc20_balance(&token_contract, &faucet_addr)
         .await
-        .expect("get faucet STRK balance after");
-    eprintln!("  Faucet STRK after: {faucet_strk_after}");
+        .expect("get faucet WBTC balance after");
+    eprintln!("  Faucet WBTC after: {faucet_strk_after}");
     assert!(
         faucet_strk_after > faucet_strk_before,
-        "faucet STRK balance should increase after withdraw (before={faucet_strk_before}, after={faucet_strk_after})"
+        "faucet WBTC balance should increase after withdraw (before={faucet_strk_before}, after={faucet_strk_after})"
     );
 
     // Cleanup: ragequit remaining balance back to faucet
@@ -817,6 +778,165 @@ async fn test_send_withdraw_to_starknet_mainnet() {
     }
 
     eprintln!("=== DONE: Mainnet withdraw test complete");
+}
+
+/// Focused mainnet test: external withdraw with app fee enabled and verified end-to-end.
+#[tokio::test]
+#[serial]
+#[ignore = "requires MAINNET env (source mainnet.env) — uses REAL WBTC"]
+async fn test_withdraw_with_fee_mainnet() {
+    let base_config = NetworkConfig::from_env();
+    assert_eq!(
+        base_config.chain_id, "SN_MAIN",
+        "this test must run against mainnet"
+    );
+
+    ensure_faucet_deployed(&base_config).await;
+    let faucet_addr = faucet_starknet_address(&base_config);
+    let faucet_hex = format!("{:#066x}", faucet_addr);
+
+    let mut collector_config = base_config.clone();
+    collector_config.fee_percent = 0.0;
+    collector_config.fee_collector_pubkey = None;
+
+    let collector_mnemonic = krusty_kms::generate_mnemonic(12).expect("collector mnemonic");
+    eprintln!("=== COLLECTOR RECOVERY MNEMONIC: {collector_mnemonic}");
+    let mut collector = make_wallet(&collector_mnemonic, &collector_config, "Collector").await;
+    let collector_pubkey = collector
+        .active_account()
+        .unwrap()
+        .owner_public_key_hex
+        .clone();
+
+    let mut fee_config = base_config.clone();
+    fee_config.fee_percent = 1.0;
+    fee_config.fee_collector_pubkey = Some(collector_pubkey);
+
+    let rpc = RpcClient::new(&fee_config).expect("RpcClient");
+    let token_contract =
+        Felt::from_hex(&fee_config.token_contract).expect("invalid token contract");
+    let rate = rpc.contract().get_rate().await.expect("get rate") as u128;
+
+    let mnemonic = krusty_kms::generate_mnemonic(12).expect("mnemonic generation");
+    eprintln!("=== RECOVERY MNEMONIC (save in case of failure): {mnemonic}");
+    let mut wallet = make_wallet(&mnemonic, &fee_config, "Sender").await;
+    let starknet_addr = wallet.active_account().unwrap().starknet_address;
+
+    eprintln!("  Faucet → Sender (2000 sats)");
+    faucet_strk(&fee_config, &starknet_addr, 2 * TOKEN_UNIT).await;
+
+    eprintln!("  Waiting for auto-fund...");
+    let balance_before = wait_for_auto_fund(&mut wallet, &fee_config, "Sender").await;
+    assert!(
+        balance_before > 0,
+        "should have Tongo balance after auto-fund"
+    );
+    eprintln!("  Tongo balance before withdraw: {balance_before}");
+
+    let faucet_public_before = rpc
+        .get_erc20_balance(&token_contract, &faucet_addr)
+        .await
+        .expect("get faucet balance before withdraw");
+    eprintln!("  Faucet WBTC before: {faucet_public_before}");
+
+    let amount_sats = "10";
+    let amount_units = oubli_wallet::sats_to_tongo_units(amount_sats).unwrap() as u128;
+    let fee_sats = oubli_wallet::calculate_fee_sats(
+        amount_sats.parse::<u64>().unwrap(),
+        fee_config.fee_percent,
+    );
+    let fee_units = oubli_wallet::sats_to_tongo_units(&fee_sats.to_string()).unwrap() as u128;
+
+    eprintln!("  handle_send (withdraw with fee) → faucet");
+    let tx = retry_paymaster_op(
+        &mut wallet,
+        "Sender",
+        3,
+        "withdraw",
+        amount_sats,
+        &faucet_hex,
+    )
+    .await;
+    eprintln!("  withdraw tx: {tx}");
+    wait_for_tx(&fee_config, &tx).await;
+
+    wallet
+        .handle_refresh_balance()
+        .await
+        .expect("refresh after withdraw");
+    let sender_after = wallet.active_account().unwrap().balance;
+    eprintln!("  Tongo balance after withdraw: {sender_after}");
+    assert_eq!(
+        sender_after,
+        balance_before - amount_units - fee_units,
+        "sender balance should decrease by withdraw amount plus fee"
+    );
+
+    let faucet_public_after = rpc
+        .get_erc20_balance(&token_contract, &faucet_addr)
+        .await
+        .expect("get faucet balance after withdraw");
+    eprintln!("  Faucet WBTC after: {faucet_public_after}");
+    assert_eq!(
+        faucet_public_after,
+        faucet_public_before + (amount_units * rate),
+        "public recipient should only receive the withdraw amount"
+    );
+
+    let mut collector_balance = 0;
+    for attempt in 1..=24 {
+        collector.handle_refresh_balance().await.ok();
+        let acct = collector.active_account().unwrap();
+        collector_balance = acct.balance;
+        if collector_balance >= fee_units && acct.pending == 0 {
+            eprintln!("  Collector credited after {attempt} attempts, balance={collector_balance}");
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    assert_eq!(
+        collector_balance, fee_units,
+        "collector should receive the fee privately"
+    );
+
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    wallet.handle_refresh_balance().await.ok();
+    let remaining = wallet.active_account().unwrap().balance;
+    if remaining > 0 {
+        eprintln!("  Cleanup: sender ragequit remaining ({remaining}) → faucet");
+        match wallet.handle_ragequit_op(&faucet_hex).await {
+            Ok(tx) => {
+                eprintln!("  sender cleanup ragequit tx: {tx}");
+                wait_for_tx(&fee_config, &tx).await;
+            }
+            Err(e) => eprintln!("  sender cleanup ragequit failed (non-fatal): {e}"),
+        }
+    }
+
+    if collector_balance > 0 {
+        eprintln!("  Cleanup: collector ragequit fee ({collector_balance}) → faucet");
+        match retry_paymaster_op(&mut collector, "Collector", 3, "ragequit", "", &faucet_hex).await
+        {
+            tx => {
+                eprintln!("  collector cleanup ragequit tx: {tx}");
+                wait_for_tx(&collector_config, &tx).await;
+            }
+        }
+    }
+
+    let sender_public = rpc
+        .get_erc20_balance(&token_contract, &starknet_addr)
+        .await
+        .unwrap_or(0);
+    if sender_public > TOKEN_UNIT / 10 {
+        let send_amount = sender_public.saturating_sub(TOKEN_UNIT / 100);
+        match wallet.send_token(&faucet_addr, send_amount).await {
+            Ok(tx) => eprintln!("  sender cleanup send_token tx: {tx}"),
+            Err(e) => eprintln!("  sender cleanup send_token failed (non-fatal): {e}"),
+        }
+    }
+
+    eprintln!("=== DONE: Mainnet withdraw-with-fee test complete");
 }
 
 /// Debug: Query get_state for a fresh (unregistered) account to check what the contract returns.
@@ -856,7 +976,10 @@ async fn test_get_state_fresh_account() {
     match wallet.handle_refresh_balance().await {
         Ok(()) => {
             let a = wallet.active_account().unwrap();
-            eprintln!("  balance={}, pending={}, nonce={}", a.balance, a.pending, a.nonce);
+            eprintln!(
+                "  balance={}, pending={}, nonce={}",
+                a.balance, a.pending, a.nonce
+            );
             eprintln!("  cipher_balance is_some={}", a.cipher_balance.is_some());
         }
         Err(e) => {
@@ -917,7 +1040,11 @@ async fn test_auto_fund_on_login_flow() {
     let class_hash = Felt::from_hex(&config.account_class_hash).unwrap();
     for attempt in 1..=36 {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        if rpc.is_account_deployed(&starknet_addr, &class_hash).await.unwrap_or(false) {
+        if rpc
+            .is_account_deployed(&starknet_addr, &class_hash)
+            .await
+            .unwrap_or(false)
+        {
             eprintln!("  Deployed after {attempt} attempts");
             break;
         }
@@ -965,20 +1092,14 @@ async fn test_auto_fund_on_login_flow() {
 }
 
 /// Prints the faucet (OUBLI_TEST_MNEMONIC_A) Starknet address for mainnet.
-/// WARNING: Creates a WalletCore which triggers auto-fund, sweeping public WBTC into Tongo.
-/// Run `test_recover_strk_mainnet` afterwards to ragequit the balance back.
 #[tokio::test]
 #[ignore = "run manually to print mainnet faucet address"]
 async fn test_print_faucet_address_mainnet() {
     let config = NetworkConfig::from_env();
-    let mnemonic_a =
-        std::env::var("OUBLI_TEST_MNEMONIC_A").expect("set OUBLI_TEST_MNEMONIC_A");
-    let storage = Box::new(MockPlatformStorage::new());
-    let mut wallet = WalletCore::new(storage, config);
-    wallet.handle_onboarding(&mnemonic_a).await.unwrap();
+    let faucet_addr = faucet_starknet_address(&config);
     eprintln!(
-        "Mainnet faucet — fund this Starknet address with STRK:\n  {:#066x}",
-        wallet.active_account().unwrap().starknet_address
+        "Mainnet faucet — fund this Starknet address with WBTC:\n  {:#066x}",
+        faucet_addr
     );
 }
 
@@ -993,11 +1114,18 @@ async fn test_print_faucet_address_mainnet() {
 #[ignore = "run manually with OUBLI_RECOVER_MNEMONICS env var"]
 async fn test_recover_strk_mainnet() {
     let config = NetworkConfig::from_env();
-    assert_eq!(config.chain_id, "SN_MAIN", "this test must run against mainnet");
+    assert_eq!(
+        config.chain_id, "SN_MAIN",
+        "this test must run against mainnet"
+    );
 
     let mnemonics_str = std::env::var("OUBLI_RECOVER_MNEMONICS")
         .expect("set OUBLI_RECOVER_MNEMONICS='mnemonic1;mnemonic2;...'");
-    let mnemonics: Vec<&str> = mnemonics_str.split(';').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let mnemonics: Vec<&str> = mnemonics_str
+        .split(';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
 
     let faucet_addr = faucet_starknet_address(&config);
     let faucet_hex = format!("{:#066x}", faucet_addr);
@@ -1121,7 +1249,10 @@ async fn resolve_ln_address(address: &str, amount_msats: u64) -> String {
 #[ignore = "requires MAINNET env + OUBLI_TEST_LN_ADDRESS — uses REAL WBTC"]
 async fn test_pay_lightning_mainnet() {
     let config = NetworkConfig::from_env();
-    assert_eq!(config.chain_id, "SN_MAIN", "this test must run against mainnet");
+    assert_eq!(
+        config.chain_id, "SN_MAIN",
+        "this test must run against mainnet"
+    );
 
     // ── Read env vars ──────────────────────────────────────────
     let ln_address = std::env::var("OUBLI_TEST_LN_ADDRESS")
@@ -1160,7 +1291,10 @@ async fn test_pay_lightning_mainnet() {
     // ── Step 3: Auto-fund (deploy + sweep into Tongo) ──────────
     eprintln!("\n=== Step 3: Auto-fund (deploy + sweep WBTC → Tongo)");
     let tongo_balance = wait_for_auto_fund(&mut wallet, &config, "LN-Payer").await;
-    assert!(tongo_balance > 0, "should have Tongo balance after auto-fund");
+    assert!(
+        tongo_balance > 0,
+        "should have Tongo balance after auto-fund"
+    );
     eprintln!("  Tongo balance: {tongo_balance}");
 
     // ── Step 4: Pay Lightning invoice ──────────────────────────

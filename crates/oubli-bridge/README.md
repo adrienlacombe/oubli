@@ -34,15 +34,26 @@ make build-android && make generate-kotlin
 - `swap_execute()` / `swap_status()` / `swap_list()` / `swap_limits()`
 
 ### Seed Backup
-- `get_mnemonic()` — Retrieve seed phrase (requires T3 auth)
+- `get_mnemonic()` — Retrieve seed phrase for seed-recovery flows
 - `generate_mnemonic()` / `validate_mnemonic()`
 
 ### Platform Storage
 Native platforms implement `PlatformStorageCallback` to bridge iOS Keychain / Android Keystore into Rust.
 
+## Generated Outputs
+
+The Rust bridge is the source of truth. These files are derived artifacts:
+
+- `ios/Generated/oubli.swift`
+- `ios/Generated/oubliFFI/oubliFFI.h`
+- `ios/Generated/oubliFFI/module.modulemap`
+- `android/app/src/main/java/uniffi/oubli/oubli.kt`
+
+When `oubli.udl` or the public bridge API changes, regenerate bindings from the compiled library and validate the checked-in outputs.
+
 ## Build Notes
 
 - Crate type: `["lib", "cdylib", "staticlib"]`
 - iOS links `liboubli_bridge.a` — do NOT rename the lib
-- Two iOS headers must stay in sync: `ios/Generated/oubliFFI.h` and `ios/Generated/oubliFFI/oubliFFI.h`
 - Always regenerate bindings from the compiled library (not from `.udl` alone)
+- Use `make regen-swift`, `make regen-kotlin`, or `make regen-bindings`

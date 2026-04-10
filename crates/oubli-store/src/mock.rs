@@ -51,10 +51,7 @@ impl PlatformStorage for MockPlatformStorage {
     }
 
     fn secure_delete(&self, key: &str) -> Result<(), String> {
-        self.store
-            .lock()
-            .map_err(|e| e.to_string())?
-            .remove(key);
+        self.store.lock().map_err(|e| e.to_string())?.remove(key);
         Ok(())
     }
 

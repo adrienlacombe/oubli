@@ -11,21 +11,23 @@ struct ProcessingView: View {
             ProgressView()
                 .scaleEffect(1.5)
                 .padding(.bottom, 8)
+                .accessibilityLabel("Processing")
 
             Text("Processing")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             if let operation = viewModel.operation {
                 Text(operationLabel(operation))
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
             }
 
             if let address = viewModel.address {
                 Text(address)
                     .font(.caption.monospaced())
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.horizontal, 40)
@@ -35,7 +37,7 @@ struct ProcessingView: View {
 
             Text("Please do not close the app.")
                 .font(.footnote)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .padding(.bottom, 40)
         }
         .padding()

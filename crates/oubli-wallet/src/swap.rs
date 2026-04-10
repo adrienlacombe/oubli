@@ -3,12 +3,15 @@
 //! Bridges oubli-swap's `SwapEngine` into WalletCore by implementing the
 //! `StarknetSignerCallback` trait using the wallet's private key.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use starknet_types_core::felt::Felt;
 
-use oubli_swap::runtime::{InMemorySwapStorage, RuntimeConfig, StarknetSignerCallback, SwapStorage};
-use oubli_swap::{SwapEngine, error::SwapError};
+use oubli_store::PlatformStorage;
+use oubli_swap::runtime::{RuntimeConfig, StarknetSignerCallback, SwapStorage};
+use oubli_swap::{error::SwapError, SwapEngine};
 
 use crate::error::WalletError;
 use crate::signing::sign_message_hash;
@@ -25,17 +28,95 @@ impl StarknetSignerCallback for WalletSignerCallback {
         let hash = Felt::from_hex(message_hash).map_err(|e| format!("bad hash: {e}"))?;
 
         // Sign with the Starknet private key
-        let (r, s) = sign_message_hash(&hash, &self.private_key)
-            .map_err(|e| format!("sign failed: {e}"))?;
+        let (r, s) =
+            sign_message_hash(&hash, &self.private_key).map_err(|e| format!("sign failed: {e}"))?;
 
         // Return as 0x-prefixed hex
         Ok((format!("{:#066x}", r), format!("{:#066x}", s)))
     }
 }
 
+/// Platform-backed swap storage that survives app restarts.
+struct PersistentSwapStorage {
+    storage: Arc<dyn PlatformStorage>,
+    storage_key: String,
+    io_lock: Mutex<()>,
+}
+
+impl PersistentSwapStorage {
+    fn new(storage: Arc<dyn PlatformStorage>, chain_id: &str, starknet_address: &Felt) -> Self {
+        Self {
+            storage,
+            storage_key: format!(
+                "oubli.swap.{}.{}",
+                chain_id,
+                format!("{:#066x}", starknet_address)
+            ),
+            io_lock: Mutex::new(()),
+        }
+    }
+
+    fn load_map(&self) -> HashMap<String, String> {
+        match self.storage.secure_load(&self.storage_key) {
+            Ok(Some(bytes)) => match serde_json::from_slice(&bytes) {
+                Ok(map) => map,
+                Err(e) => {
+                    eprintln!("[oubli] swap storage: decode failed: {e}");
+                    HashMap::new()
+                }
+            },
+            Ok(None) => HashMap::new(),
+            Err(e) => {
+                eprintln!("[oubli] swap storage: load failed: {e}");
+                HashMap::new()
+            }
+        }
+    }
+
+    fn store_map(&self, map: &HashMap<String, String>) {
+        if map.is_empty() {
+            if let Err(e) = self.storage.secure_delete(&self.storage_key) {
+                eprintln!("[oubli] swap storage: delete failed: {e}");
+            }
+            return;
+        }
+
+        match serde_json::to_vec(map) {
+            Ok(bytes) => {
+                if let Err(e) = self.storage.secure_store(&self.storage_key, &bytes) {
+                    eprintln!("[oubli] swap storage: store failed: {e}");
+                }
+            }
+            Err(e) => eprintln!("[oubli] swap storage: encode failed: {e}"),
+        }
+    }
+}
+
+impl SwapStorage for PersistentSwapStorage {
+    fn get(&self, key: &str) -> Option<String> {
+        let _guard = self.io_lock.lock().unwrap();
+        self.load_map().get(key).cloned()
+    }
+
+    fn set(&self, key: &str, value: &str) {
+        let _guard = self.io_lock.lock().unwrap();
+        let mut map = self.load_map();
+        map.insert(key.to_string(), value.to_string());
+        self.store_map(&map);
+    }
+
+    fn remove(&self, key: &str) {
+        let _guard = self.io_lock.lock().unwrap();
+        let mut map = self.load_map();
+        map.remove(key);
+        self.store_map(&map);
+    }
+}
+
 /// Initialize the swap engine from wallet state.
 /// Called lazily when the first swap operation is requested.
 pub(crate) async fn create_swap_engine(
+    storage: Arc<dyn PlatformStorage>,
     starknet_address: &Felt,
     starknet_public_key: &Felt,
     starknet_private_key: &Felt,
@@ -59,7 +140,11 @@ pub(crate) async fn create_swap_engine(
         private_key: *starknet_private_key,
     });
 
-    let storage: Arc<dyn SwapStorage> = Arc::new(InMemorySwapStorage::default());
+    let storage: Arc<dyn SwapStorage> = Arc::new(PersistentSwapStorage::new(
+        storage,
+        chain_id,
+        starknet_address,
+    ));
 
     SwapEngine::new(config, signer, storage)
         .await
@@ -69,4 +154,30 @@ pub(crate) async fn create_swap_engine(
 /// Convert SwapError to WalletError.
 pub(crate) fn swap_err(e: SwapError) -> WalletError {
     WalletError::Network(format!("swap: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oubli_store::MockPlatformStorage;
+
+    #[test]
+    fn persistent_swap_storage_survives_recreation() {
+        let storage: Arc<dyn PlatformStorage> = Arc::new(MockPlatformStorage::new());
+        let address = Felt::from_hex("0x123").unwrap();
+
+        let first = PersistentSwapStorage::new(Arc::clone(&storage), "SN_SEPOLIA", &address);
+        first.set("swap-1", "{\"state\":\"created\"}");
+
+        let second = PersistentSwapStorage::new(Arc::clone(&storage), "SN_SEPOLIA", &address);
+        assert_eq!(
+            second.get("swap-1").as_deref(),
+            Some("{\"state\":\"created\"}")
+        );
+
+        second.remove("swap-1");
+
+        let third = PersistentSwapStorage::new(storage, "SN_SEPOLIA", &address);
+        assert_eq!(third.get("swap-1"), None);
+    }
 }

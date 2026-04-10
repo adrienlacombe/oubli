@@ -3,7 +3,10 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AuthError {
     #[error("transition denied: cannot move from {from:?} via {action:?}")]
-    TransitionDenied { from: crate::tier::AuthTier, action: crate::tier::AuthAction },
+    TransitionDenied {
+        from: crate::tier::AuthTier,
+        action: crate::tier::AuthAction,
+    },
 
     #[error("session expired")]
     SessionExpired,

@@ -47,6 +47,27 @@ struct QRScannerView: UIViewControllerRepresentable {
             view.layer.addSublayer(preview)
 
             captureSession = session
+
+            // Scanner overlay
+            let overlayView = ScannerOverlayView()
+            overlayView.frame = view.bounds
+            overlayView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            overlayView.backgroundColor = .clear
+            view.addSubview(overlayView)
+
+            // Hint label
+            let hintLabel = UILabel()
+            hintLabel.text = "Point camera at QR code"
+            hintLabel.textColor = .white
+            hintLabel.font = .systemFont(ofSize: 15, weight: .medium)
+            hintLabel.textAlignment = .center
+            hintLabel.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(hintLabel)
+            NSLayoutConstraint.activate([
+                hintLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                hintLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -80),
+            ])
+
             DispatchQueue.global(qos: .userInitiated).async {
                 session.startRunning()
             }
@@ -73,6 +94,35 @@ struct QRScannerView: UIViewControllerRepresentable {
             hasScanned = true
             captureSession?.stopRunning()
             onCodeScanned?(value)
+        }
+
+        // MARK: - Scanner Overlay
+
+        private class ScannerOverlayView: UIView {
+            override func draw(_ rect: CGRect) {
+                guard let ctx = UIGraphicsGetCurrentContext() else { return }
+                let cutoutSize = min(rect.width, rect.height) * 0.65
+                let cutoutRect = CGRect(
+                    x: (rect.width - cutoutSize) / 2,
+                    y: (rect.height - cutoutSize) / 2,
+                    width: cutoutSize,
+                    height: cutoutSize
+                )
+                // Semi-transparent background
+                ctx.setFillColor(UIColor.black.withAlphaComponent(0.5).cgColor)
+                ctx.fill(rect)
+                // Clear cutout
+                ctx.setBlendMode(.clear)
+                let cutoutPath = UIBezierPath(roundedRect: cutoutRect, cornerRadius: 12)
+                ctx.addPath(cutoutPath.cgPath)
+                ctx.fillPath()
+                // White border
+                ctx.setBlendMode(.normal)
+                ctx.setStrokeColor(UIColor.white.cgColor)
+                ctx.setLineWidth(2)
+                ctx.addPath(cutoutPath.cgPath)
+                ctx.strokePath()
+            }
         }
 
         private func showFallback() {

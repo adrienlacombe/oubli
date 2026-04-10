@@ -46,6 +46,13 @@ The TypeScript source lives in `oubli-swap-js/` and builds into `crates/oubli-sw
 make build-swap-js  # or: cd oubli-swap-js && npm run build
 ```
 
+## Runtime Boundary
+
+- Rust remains the source of truth for signing. JS requests signatures through `__oubli_starknet_sign`.
+- Rust also owns durable storage. JS should treat in-memory maps as caches and recover swap state through the storage-backed runtime.
+- The host-function contract lives in `src/runtime.rs`. If you add or rename a host function, inspect the matching call sites in `oubli-swap-js/src/`.
+- After any TypeScript change, rebuild `js/bundle.js` and verify the checked-in artifact changed intentionally.
+
 ## Key Implementation Details
 
 - **Binary fetch**: Response bodies are base64-encoded to preserve binary data (LP wire protocol uses length-prefixed frames)

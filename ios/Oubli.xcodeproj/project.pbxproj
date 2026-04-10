@@ -7,17 +7,26 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		045BA58394E0A591A336A886 /* ContactDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B074AB6B7DCA882C24F23B81 /* ContactDetailSheet.swift */; };
+		07B354B839BD0A82F03552CE /* DualAmountInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9DEBB6844AA4E602D88741 /* DualAmountInput.swift */; };
+		1512BD8802F90641F34E78FA /* ContactPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2246779D07415BD574B242A8 /* ContactPickerView.swift */; };
 		1612232EDF773DBB57CB6A04 /* SeedPhraseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A6AF93C44B9BE0512E5DED /* SeedPhraseUITests.swift */; };
 		1D16DD31B98AB8AA4CB4CB7D /* OubliApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8564D8E7F2019FC31FC9977C /* OubliApp.swift */; };
 		30F8C36B632B9EB313805714 /* KeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287821FB14E7B56253E2D471 /* KeychainStorage.swift */; };
 		4672104C7346C13C1F6A8BA0 /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96AFE6677765C46C287A01B3 /* WalletViewModel.swift */; };
 		4966A1073578050D6F7C4E55 /* ProcessingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */; };
-		QRS00001000000000000001 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = QRS00002000000000000001 /* QRScannerView.swift */; };
 		65FA030DFBA1FDA2F61FDA31 /* WalletE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95D84C518EB9D7DCF61C43D /* WalletE2ETests.swift */; };
+		796228EBBF49E829CB276859 /* SendSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C13F3BE9204AB1EF9798CFF /* SendSheet.swift */; };
 		7D662EF9F2D850B05336E8CC /* BalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC83C393C11B50B15303B59 /* BalanceView.swift */; };
+		83785D478A8157AFA4DAEF36 /* OubliColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBE5E69EB90543AC15722DB /* OubliColors.swift */; };
+		93B87DD15F21532E2577C71D /* QRScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6BAF39B35B71DEC302F345 /* QRScannerSheet.swift */; };
 		9786487333F6E4FF0CDEE992 /* SeedBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */; };
 		9A559F2A7B7ECFF2F89DC149 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */; };
+		A9622CDD9101A93FD442D9E3 /* ContactListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CDEEEFC2B63D85BBC57BA3 /* ContactListView.swift */; };
 		AD45E8D912A63A0724D79DC2 /* oubli.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0114A555A5F64661B35DDF /* oubli.swift */; };
+		AE14803A67FA4241A197A133 /* SeedPhraseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC9040427E4BE77E0FBD9AF /* SeedPhraseSheet.swift */; };
+		D30408BC5CBCEA1397B7554E /* ReceiveSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 314E1591D69154CAC65C3B6D /* ReceiveSheet.swift */; };
+		E9F747A07BEE69B22644C52B /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E462B7B0A0D843D262D38C6 /* QRScannerView.swift */; };
 		EBF12403F1DAF01C4E5AB1E6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952C80A88E130490E779D31F /* ContentView.swift */; };
 		F0BEFFCAF60EA552D1CE0C0D /* LockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9394E8D44E14075E87B6DB3F /* LockedView.swift */; };
 /* End PBXBuildFile section */
@@ -34,18 +43,27 @@
 
 /* Begin PBXFileReference section */
 		14A6AF93C44B9BE0512E5DED /* SeedPhraseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedPhraseUITests.swift; sourceTree = "<group>"; };
+		1C13F3BE9204AB1EF9798CFF /* SendSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendSheet.swift; sourceTree = "<group>"; };
+		2246779D07415BD574B242A8 /* ContactPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactPickerView.swift; sourceTree = "<group>"; };
 		287821FB14E7B56253E2D471 /* KeychainStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStorage.swift; sourceTree = "<group>"; };
+		314E1591D69154CAC65C3B6D /* ReceiveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveSheet.swift; sourceTree = "<group>"; };
+		3A9DEBB6844AA4E602D88741 /* DualAmountInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualAmountInput.swift; sourceTree = "<group>"; };
 		3C52EFF27AB2B6A8FD2EBDC5 /* OubliUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = OubliUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C6BAF39B35B71DEC302F345 /* QRScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerSheet.swift; sourceTree = "<group>"; };
+		5E462B7B0A0D843D262D38C6 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		6B74DA06B629FCD72CDA97C7 /* Oubli.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Oubli.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7FC9040427E4BE77E0FBD9AF /* SeedPhraseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedPhraseSheet.swift; sourceTree = "<group>"; };
 		8564D8E7F2019FC31FC9977C /* OubliApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OubliApp.swift; sourceTree = "<group>"; };
 		8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingView.swift; sourceTree = "<group>"; };
-		QRS00002000000000000001 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		9394E8D44E14075E87B6DB3F /* LockedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedView.swift; sourceTree = "<group>"; };
 		952C80A88E130490E779D31F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		96AFE6677765C46C287A01B3 /* WalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedBackupView.swift; sourceTree = "<group>"; };
 		AFC83C393C11B50B15303B59 /* BalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BalanceView.swift; sourceTree = "<group>"; };
+		B074AB6B7DCA882C24F23B81 /* ContactDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactDetailSheet.swift; sourceTree = "<group>"; };
+		BFBE5E69EB90543AC15722DB /* OubliColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OubliColors.swift; sourceTree = "<group>"; };
+		C7CDEEEFC2B63D85BBC57BA3 /* ContactListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListView.swift; sourceTree = "<group>"; };
 		CD0114A555A5F64661B35DDF /* oubli.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = oubli.swift; sourceTree = "<group>"; };
 		E95D84C518EB9D7DCF61C43D /* WalletE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletE2ETests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -73,10 +91,19 @@
 			children = (
 				8564D8E7F2019FC31FC9977C /* OubliApp.swift */,
 				AD08B6E493FDDA887333A55A /* Platform */,
+				5350D9FFA814F7908560EB47 /* Theme */,
 				B953495FF043136C99B932AA /* ViewModels */,
 				C1B7D1702C40FF77563AF72B /* Views */,
 			);
 			path = Oubli;
+			sourceTree = "<group>";
+		};
+		5350D9FFA814F7908560EB47 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				BFBE5E69EB90543AC15722DB /* OubliColors.swift */,
+			);
+			path = Theme;
 			sourceTree = "<group>";
 		};
 		AD08B6E493FDDA887333A55A /* Platform */ = {
@@ -99,12 +126,20 @@
 			isa = PBXGroup;
 			children = (
 				AFC83C393C11B50B15303B59 /* BalanceView.swift */,
+				B074AB6B7DCA882C24F23B81 /* ContactDetailSheet.swift */,
+				C7CDEEEFC2B63D85BBC57BA3 /* ContactListView.swift */,
+				2246779D07415BD574B242A8 /* ContactPickerView.swift */,
 				952C80A88E130490E779D31F /* ContentView.swift */,
+				3A9DEBB6844AA4E602D88741 /* DualAmountInput.swift */,
 				9394E8D44E14075E87B6DB3F /* LockedView.swift */,
 				9B47F24A7543ACE8C10B3164 /* OnboardingView.swift */,
 				8DB15CB6D179C57FE3D85BA7 /* ProcessingView.swift */,
-				QRS00002000000000000001 /* QRScannerView.swift */,
+				5C6BAF39B35B71DEC302F345 /* QRScannerSheet.swift */,
+				5E462B7B0A0D843D262D38C6 /* QRScannerView.swift */,
+				314E1591D69154CAC65C3B6D /* ReceiveSheet.swift */,
 				A43E084F99DE16CFA4E60EEF /* SeedBackupView.swift */,
+				7FC9040427E4BE77E0FBD9AF /* SeedPhraseSheet.swift */,
+				1C13F3BE9204AB1EF9798CFF /* SendSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -206,14 +241,23 @@
 			buildActionMask = 2147483647;
 			files = (
 				7D662EF9F2D850B05336E8CC /* BalanceView.swift in Sources */,
+				045BA58394E0A591A336A886 /* ContactDetailSheet.swift in Sources */,
+				A9622CDD9101A93FD442D9E3 /* ContactListView.swift in Sources */,
+				1512BD8802F90641F34E78FA /* ContactPickerView.swift in Sources */,
 				EBF12403F1DAF01C4E5AB1E6 /* ContentView.swift in Sources */,
+				07B354B839BD0A82F03552CE /* DualAmountInput.swift in Sources */,
 				30F8C36B632B9EB313805714 /* KeychainStorage.swift in Sources */,
 				F0BEFFCAF60EA552D1CE0C0D /* LockedView.swift in Sources */,
 				9A559F2A7B7ECFF2F89DC149 /* OnboardingView.swift in Sources */,
 				1D16DD31B98AB8AA4CB4CB7D /* OubliApp.swift in Sources */,
+				83785D478A8157AFA4DAEF36 /* OubliColors.swift in Sources */,
 				4966A1073578050D6F7C4E55 /* ProcessingView.swift in Sources */,
-				QRS00001000000000000001 /* QRScannerView.swift in Sources */,
+				93B87DD15F21532E2577C71D /* QRScannerSheet.swift in Sources */,
+				E9F747A07BEE69B22644C52B /* QRScannerView.swift in Sources */,
+				D30408BC5CBCEA1397B7554E /* ReceiveSheet.swift in Sources */,
 				9786487333F6E4FF0CDEE992 /* SeedBackupView.swift in Sources */,
+				AE14803A67FA4241A197A133 /* SeedPhraseSheet.swift in Sources */,
+				796228EBBF49E829CB276859 /* SendSheet.swift in Sources */,
 				4672104C7346C13C1F6A8BA0 /* WalletViewModel.swift in Sources */,
 				AD45E8D912A63A0724D79DC2 /* oubli.swift in Sources */,
 			);
@@ -345,7 +389,6 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Oubli needs camera access to scan QR codes for sending.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -432,7 +475,6 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Oubli needs camera access to scan QR codes for sending.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

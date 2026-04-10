@@ -17,7 +17,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -52,6 +58,7 @@ fun OnboardingScreen(
     onGenerateMnemonic: (callback: (String) -> Unit) -> Unit,
     onValidateMnemonic: (phrase: String, callback: (Boolean) -> Unit) -> Unit,
     onComplete: (mnemonic: String) -> Unit,
+    onShowMessage: (String) -> Unit = {},
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var mnemonic by rememberSaveable { mutableStateOf("") }
@@ -62,7 +69,7 @@ fun OnboardingScreen(
         label = "onboarding_step",
     ) { currentStep ->
         when (currentStep) {
-            0 -> WelcomeStep(onGetStarted = { step = 1 })
+            0 -> WelcomeStep(onGetStarted = { step = 1 }, onRestore = { step = 4 })
             1 -> DisclaimerStep(onContinue = { step = 2 })
             2 -> CreateOrRestoreStep(
                 onCreateNew = {
@@ -76,6 +83,7 @@ fun OnboardingScreen(
             3 -> MnemonicDisplayStep(
                 mnemonic = mnemonic,
                 onContinue = { onComplete(mnemonic) },
+                onShowMessage = onShowMessage,
             )
             4 -> MnemonicRestoreStep(
                 errorText = errorText,
@@ -99,7 +107,7 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun WelcomeStep(onGetStarted: () -> Unit) {
+private fun WelcomeStep(onGetStarted: () -> Unit, onRestore: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -109,6 +117,7 @@ private fun WelcomeStep(onGetStarted: () -> Unit) {
             text = "Oubli",
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -120,6 +129,10 @@ private fun WelcomeStep(onGetStarted: () -> Unit) {
         Spacer(modifier = Modifier.height(48.dp))
         Button(onClick = onGetStarted, modifier = Modifier.fillMaxWidth()) {
             Text("Get Started")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onRestore) {
+            Text("I already have a wallet")
         }
     }
 }
@@ -133,36 +146,49 @@ private fun DisclaimerStep(onContinue: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "You Are in Control",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "Oubli is a self-custodial wallet. You alone hold your private keys. No one \u2014 not even Oubli \u2014 can recover your funds if you lose your seed phrase. Make sure to back it up and store it safely.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceBright.copy(alpha = 0.4f),
+            ),
         ) {
-            Checkbox(checked = accepted, onCheckedChange = { accepted = it })
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "I understand that I am responsible for keeping my seed phrase safe.",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "You Are in Control",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Oubli is a self-custodial wallet. You alone hold your private keys. No one \u2014 not even Oubli \u2014 can recover your funds if you lose your seed phrase. Make sure to back it up and store it safely.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "I understand that I am responsible for keeping my seed phrase safe.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth(), enabled = accepted) {
@@ -182,6 +208,7 @@ private fun CreateOrRestoreStep(onCreateNew: () -> Unit, onRestore: () -> Unit) 
             text = "Set Up Your Wallet",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -202,11 +229,12 @@ private fun CreateOrRestoreStep(onCreateNew: () -> Unit, onRestore: () -> Unit) 
 }
 
 @Composable
-private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit) {
+private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit, onShowMessage: (String) -> Unit = {}) {
     val words = remember(mnemonic) { mnemonic.split(" ") }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
+    var showClipboardWarning by remember { mutableStateOf(false) }
 
     LaunchedEffect(copied) {
         if (copied) {
@@ -227,6 +255,7 @@ private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit) {
             text = "Your Recovery Phrase",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -254,11 +283,7 @@ private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit) {
 
         Spacer(modifier = Modifier.height(24.dp))
         OutlinedButton(
-            onClick = {
-                clipboardManager.setText(AnnotatedString(mnemonic))
-                copied = true
-                android.widget.Toast.makeText(context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
-            },
+            onClick = { showClipboardWarning = true },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(
@@ -268,6 +293,31 @@ private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(if (copied) "Copied!" else "Copy to Clipboard")
+        }
+
+        if (showClipboardWarning) {
+            AlertDialog(
+                onDismissRequest = { showClipboardWarning = false },
+                title = { Text("Clipboard Warning") },
+                text = {
+                    Text("Your seed phrase will be copied to the clipboard, where other apps may be able to read it. Only do this if you intend to paste it immediately and clear your clipboard afterward.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showClipboardWarning = false
+                        clipboardManager.setText(AnnotatedString(mnemonic))
+                        copied = true
+                        onShowMessage("Copied to clipboard")
+                    }) {
+                        Text("Copy Anyway")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClipboardWarning = false }) {
+                        Text("Cancel")
+                    }
+                },
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -280,7 +330,9 @@ private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit) {
 @Composable
 private fun WordChip(index: Int, word: String, modifier: Modifier = Modifier) {
     androidx.compose.material3.Card(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = "Word $index: $word"
+        },
         colors = androidx.compose.material3.CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -290,7 +342,7 @@ private fun WordChip(index: Int, word: String, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "$index.",
+                text = String.format("%02d.", index),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.width(28.dp),
@@ -321,6 +373,7 @@ private fun MnemonicRestoreStep(
             text = "Restore Wallet",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(

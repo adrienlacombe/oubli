@@ -49,6 +49,21 @@ let signerWrapper: any = null;
 // Store created swap objects so executeSwap can find them
 const activeSwaps: Map<string, any> = new Map();
 
+async function getTrackedSwap(swapId: string): Promise<any | null> {
+  const cached = activeSwaps.get(swapId);
+  if (cached) {
+    return cached;
+  }
+  if (!signerWrapper) {
+    return null;
+  }
+  const loaded = await signerWrapper.getSwapById(swapId);
+  if (loaded) {
+    activeSwaps.set(swapId, loaded);
+  }
+  return loaded ?? null;
+}
+
 // Debug: collect fetch logs during init
 let fetchLogs: string[] = [];
 let collectFetchLogs = false;
@@ -191,6 +206,7 @@ async function createBtcToWbtcSwap(amountSats: string, exactIn: boolean): Promis
       BigInt(amountSats),
       exactIn,
     );
+    activeSwaps.set(swap.getId(), swap);
 
     const quote: SwapQuote = {
       swapId: swap.getId(),
@@ -234,6 +250,7 @@ async function createWbtcToBtcSwap(
       exactIn,
       btcAddress,
     );
+    activeSwaps.set(swap.getId(), swap);
 
     const quote: SwapQuote = {
       swapId: swap.getId(),
@@ -441,9 +458,9 @@ async function executeSwap(swapId: string): Promise<string> {
       return JSON.stringify({ ok: false, error: "Swapper not initialized" });
     }
 
-    const swap = activeSwaps.get(swapId);
+    const swap = await getTrackedSwap(swapId);
     if (!swap) {
-      return JSON.stringify({ ok: false, error: `Swap ${swapId} not found in activeSwaps (have ${activeSwaps.size})` });
+      return JSON.stringify({ ok: false, error: `Swap ${swapId} not found` });
     }
 
     __oubli_log("info", `executeSwap: state=${swap.getState?.()}, type=${swap.constructor?.name}`);
@@ -469,7 +486,8 @@ async function executeSwap(swapId: string): Promise<string> {
       const success = await swap.waitForPayment(120, 5);
       if (success) {
         __oubli_log("info", `executeSwap: payment confirmed!`);
-        return JSON.stringify({ ok: true, secret: swap.getSecret?.() ?? "" });
+        activeSwaps.delete(swapId);
+        return JSON.stringify({ ok: true });
       } else {
         __oubli_log("error", `executeSwap: payment failed, swap may be refundable`);
         return JSON.stringify({ ok: false, error: "LP failed to pay Lightning invoice. Swap is refundable." });
@@ -499,9 +517,9 @@ async function executeSwap(swapId: string): Promise<string> {
  */
 async function waitForIncomingSwap(swapId: string): Promise<string> {
   try {
-    const swap = activeSwaps.get(swapId);
+    const swap = await getTrackedSwap(swapId);
     if (!swap) {
-      return JSON.stringify({ ok: false, error: `Swap ${swapId} not found in activeSwaps (have: ${[...activeSwaps.keys()].join(", ")})` });
+      return JSON.stringify({ ok: false, error: `Swap ${swapId} not found` });
     }
 
     __oubli_log("info", `waitForIncomingSwap: type=${swap.constructor?.name}, state=${swap.getState?.()}`);
@@ -576,7 +594,7 @@ async function getSwapStatus(swapId: string): Promise<string> {
       return JSON.stringify({ ok: false, error: "Swapper not initialized" });
     }
 
-    const swap = await signerWrapper.getSwapById(swapId);
+    const swap = await getTrackedSwap(swapId);
     if (!swap) {
       return JSON.stringify({ ok: false, error: `Swap ${swapId} not found` });
     }
@@ -603,6 +621,9 @@ async function getAllSwaps(): Promise<string> {
     }
 
     const swaps = await signerWrapper.getAllSwaps();
+    for (const swap of swaps) {
+      activeSwaps.set(swap.getId(), swap);
+    }
     const result = swaps.map((s: any) => ({
       swapId: s.getId(),
       state: mapSwapState(s),

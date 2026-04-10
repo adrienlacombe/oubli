@@ -832,6 +832,26 @@ internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -856,21 +876,37 @@ internal interface UniffiLib : Library {
     ): Pointer
     fun uniffi_oubli_bridge_fn_free_oubliwallet(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    fun uniffi_oubli_bridge_fn_constructor_oubliwallet_new(`storage`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_oubli_bridge_fn_constructor_oubliwallet_new(`storage`: Long,`rpcUrl`: RustBuffer.ByValue,`paymasterApiKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Pointer
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(`ptr`: Pointer,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_generate_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(`ptr`: Pointer,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price_usd(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Double
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_rpc_url(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_get_state(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(`ptr`: Pointer,`txHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_complete_onboarding(`ptr`: Pointer,`mnemonic`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -900,6 +936,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(`ptr`: Pointer,`contact`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_execute(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -914,6 +952,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_wbtc_to_btc(`ptr`: Pointer,`amountSats`: Long,`btcAddress`: RustBuffer.ByValue,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_oubli_bridge_fn_method_oubliwallet_update_rpc_url(`ptr`: Pointer,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_oubli_bridge_fn_method_oubliwallet_validate_mnemonic(`ptr`: Pointer,`phrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1032,19 +1072,35 @@ internal interface UniffiLib : Library {
     ): Unit
     fun ffi_oubli_bridge_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address(
+    ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_generate_mnemonic(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_activity(
     ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price(
+    ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price_usd(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_cached_activity(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_contacts(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_fee_percent(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_mnemonic(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_rpc_url(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_state(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_transfer_recipient(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_complete_onboarding(
     ): Short
@@ -1074,6 +1130,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait(
     ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact(
+    ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_execute(
@@ -1087,6 +1145,8 @@ internal interface UniffiLib : Library {
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_status(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_wbtc_to_btc(
+    ): Short
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_contact_last_used(
     ): Short
     fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url(
     ): Short
@@ -1123,16 +1183,37 @@ private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
 
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: UniffiLib) {
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee() != 48584.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee() != 20848.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact() != 32744.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address() != 34436.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_generate_mnemonic() != 23503.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_activity() != 36475.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price() != 55702.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price_usd() != 65337.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_cached_activity() != 4114.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_contacts() != 8394.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_fee_percent() != 8285.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_mnemonic() != 50822.toShort()) {
@@ -1142,6 +1223,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_state() != 42679.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_get_transfer_recipient() != 24174.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_handle_complete_onboarding() != 8443.toShort()) {
@@ -1186,6 +1270,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait() != 42286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact() != 3700.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc() != 49103.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1207,13 +1294,16 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_swap_wbtc_to_btc() != 55933.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_update_contact_last_used() != 18417.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url() != 31864.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic() != 25697.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 63484.toShort()) {
+    if (lib.uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 52574.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store() != 9671.toShort()) {
@@ -1617,19 +1707,35 @@ private class JavaLangRefCleanable(
 }
 public interface OubliWalletInterface {
     
+    fun `calculateFee`(`amountSats`: kotlin.String): kotlin.String
+    
+    fun `calculateSendFee`(`amountSats`: kotlin.String, `recipient`: kotlin.String): kotlin.String
+    
+    fun `deleteContact`(`contactId`: kotlin.String)
+    
+    fun `findContactByAddress`(`address`: kotlin.String): ContactFfi?
+    
     fun `generateMnemonic`(): kotlin.String
     
     fun `getActivity`(): List<ActivityEventFfi>
     
+    fun `getBtcPrice`(`currency`: kotlin.String): kotlin.Double?
+    
     fun `getBtcPriceUsd`(): kotlin.Double?
     
     fun `getCachedActivity`(): List<ActivityEventFfi>
+    
+    fun `getContacts`(): List<ContactFfi>
+    
+    fun `getFeePercent`(): kotlin.Double
     
     fun `getMnemonic`(): kotlin.String
     
     fun `getRpcUrl`(): kotlin.String
     
     fun `getState`(): WalletStateInfo
+    
+    fun `getTransferRecipient`(`txHash`: kotlin.String): kotlin.String?
     
     fun `handleCompleteOnboarding`(`mnemonic`: kotlin.String)
     
@@ -1659,6 +1765,8 @@ public interface OubliWalletInterface {
     
     fun `receiveLightningWait`(`swapId`: kotlin.String)
     
+    fun `saveContact`(`contact`: ContactFfi): kotlin.String
+    
     fun `swapBtcToWbtc`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi
     
     fun `swapExecute`(`swapId`: kotlin.String)
@@ -1672,6 +1780,8 @@ public interface OubliWalletInterface {
     fun `swapStatus`(`swapId`: kotlin.String): SwapStatusFfi
     
     fun `swapWbtcToBtc`(`amountSats`: kotlin.ULong, `btcAddress`: kotlin.String, `exactIn`: kotlin.Boolean): SwapQuoteFfi
+    
+    fun `updateContactLastUsed`(`contactId`: kotlin.String)
     
     fun `updateRpcUrl`(`url`: kotlin.String)
     
@@ -1697,11 +1807,11 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
         this.pointer = null
         this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
     }
-    constructor(`storage`: PlatformStorageCallback) :
+    constructor(`storage`: PlatformStorageCallback, `rpcUrl`: kotlin.String?, `paymasterApiKey`: kotlin.String?) :
         this(
     uniffiRustCallWithError(OubliException) { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_constructor_oubliwallet_new(
-        FfiConverterTypePlatformStorageCallback.lower(`storage`),_status)
+        FfiConverterTypePlatformStorageCallback.lower(`storage`),FfiConverterOptionalString.lower(`rpcUrl`),FfiConverterOptionalString.lower(`paymasterApiKey`),_status)
 }
     )
 
@@ -1768,6 +1878,54 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
         }
     }
 
+    override fun `calculateFee`(`amountSats`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(
+        it, FfiConverterString.lower(`amountSats`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `calculateSendFee`(`amountSats`: kotlin.String, `recipient`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(
+        it, FfiConverterString.lower(`amountSats`),FfiConverterString.lower(`recipient`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(OubliException::class)override fun `deleteContact`(`contactId`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(
+        it, FfiConverterString.lower(`contactId`),_status)
+}
+    }
+    
+    
+
+    override fun `findContactByAddress`(`address`: kotlin.String): ContactFfi? {
+            return FfiConverterOptionalTypeContactFFI.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(
+        it, FfiConverterString.lower(`address`),_status)
+}
+    }
+    )
+    }
+    
+
     
     @Throws(OubliException::class)override fun `generateMnemonic`(): kotlin.String {
             return FfiConverterString.lift(
@@ -1794,6 +1952,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
     }
     
 
+    override fun `getBtcPrice`(`currency`: kotlin.String): kotlin.Double? {
+            return FfiConverterOptionalDouble.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(
+        it, FfiConverterString.lower(`currency`),_status)
+}
+    }
+    )
+    }
+    
+
     override fun `getBtcPriceUsd`(): kotlin.Double? {
             return FfiConverterOptionalDouble.lift(
     callWithPointer {
@@ -1811,6 +1981,30 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
     callWithPointer {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `getContacts`(): List<ContactFfi> {
+            return FfiConverterSequenceTypeContactFFI.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `getFeePercent`(): kotlin.Double {
+            return FfiConverterDouble.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(
         it, _status)
 }
     }
@@ -1849,6 +2043,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_state(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `getTransferRecipient`(`txHash`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(
+        it, FfiConverterString.lower(`txHash`),_status)
 }
     }
     )
@@ -2033,6 +2239,19 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
     
 
     
+    @Throws(OubliException::class)override fun `saveContact`(`contact`: ContactFfi): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(
+        it, FfiConverterTypeContactFFI.lower(`contact`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(OubliException::class)override fun `swapBtcToWbtc`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi {
             return FfiConverterTypeSwapQuoteFFI.lift(
     callWithPointer {
@@ -2122,6 +2341,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
     }
     
 
+    
+    @Throws(OubliException::class)override fun `updateContactLastUsed`(`contactId`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(
+        it, FfiConverterString.lower(`contactId`),_status)
+}
+    }
+    
+    
+
     override fun `updateRpcUrl`(`url`: kotlin.String)
         = 
     callWithPointer {
@@ -2187,7 +2418,10 @@ data class ActivityEventFfi (
     var `eventType`: kotlin.String, 
     var `amountSats`: kotlin.String?, 
     var `txHash`: kotlin.String, 
-    var `blockNumber`: kotlin.ULong
+    var `blockNumber`: kotlin.ULong, 
+    var `timestampSecs`: kotlin.ULong?, 
+    var `status`: kotlin.String, 
+    var `explorerUrl`: kotlin.String?
 ) {
     
     companion object
@@ -2203,6 +2437,9 @@ public object FfiConverterTypeActivityEventFFI: FfiConverterRustBuffer<ActivityE
             FfiConverterOptionalString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2210,7 +2447,10 @@ public object FfiConverterTypeActivityEventFFI: FfiConverterRustBuffer<ActivityE
             FfiConverterString.allocationSize(value.`eventType`) +
             FfiConverterOptionalString.allocationSize(value.`amountSats`) +
             FfiConverterString.allocationSize(value.`txHash`) +
-            FfiConverterULong.allocationSize(value.`blockNumber`)
+            FfiConverterULong.allocationSize(value.`blockNumber`) +
+            FfiConverterOptionalULong.allocationSize(value.`timestampSecs`) +
+            FfiConverterString.allocationSize(value.`status`) +
+            FfiConverterOptionalString.allocationSize(value.`explorerUrl`)
     )
 
     override fun write(value: ActivityEventFfi, buf: ByteBuffer) {
@@ -2218,6 +2458,93 @@ public object FfiConverterTypeActivityEventFFI: FfiConverterRustBuffer<ActivityE
             FfiConverterOptionalString.write(value.`amountSats`, buf)
             FfiConverterString.write(value.`txHash`, buf)
             FfiConverterULong.write(value.`blockNumber`, buf)
+            FfiConverterOptionalULong.write(value.`timestampSecs`, buf)
+            FfiConverterString.write(value.`status`, buf)
+            FfiConverterOptionalString.write(value.`explorerUrl`, buf)
+    }
+}
+
+
+
+data class ContactAddressFfi (
+    var `address`: kotlin.String, 
+    var `addressType`: AddressTypeFfi, 
+    var `label`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeContactAddressFFI: FfiConverterRustBuffer<ContactAddressFfi> {
+    override fun read(buf: ByteBuffer): ContactAddressFfi {
+        return ContactAddressFfi(
+            FfiConverterString.read(buf),
+            FfiConverterTypeAddressTypeFFI.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ContactAddressFfi) = (
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterTypeAddressTypeFFI.allocationSize(value.`addressType`) +
+            FfiConverterOptionalString.allocationSize(value.`label`)
+    )
+
+    override fun write(value: ContactAddressFfi, buf: ByteBuffer) {
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterTypeAddressTypeFFI.write(value.`addressType`, buf)
+            FfiConverterOptionalString.write(value.`label`, buf)
+    }
+}
+
+
+
+data class ContactFfi (
+    var `id`: kotlin.String, 
+    var `name`: kotlin.String, 
+    var `addresses`: List<ContactAddressFfi>, 
+    var `notes`: kotlin.String?, 
+    var `createdAt`: kotlin.ULong, 
+    var `lastUsedAt`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeContactFFI: FfiConverterRustBuffer<ContactFfi> {
+    override fun read(buf: ByteBuffer): ContactFfi {
+        return ContactFfi(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeContactAddressFFI.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ContactFfi) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterSequenceTypeContactAddressFFI.allocationSize(value.`addresses`) +
+            FfiConverterOptionalString.allocationSize(value.`notes`) +
+            FfiConverterULong.allocationSize(value.`createdAt`) +
+            FfiConverterULong.allocationSize(value.`lastUsedAt`)
+    )
+
+    override fun write(value: ContactFfi, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterSequenceTypeContactAddressFFI.write(value.`addresses`, buf)
+            FfiConverterOptionalString.write(value.`notes`, buf)
+            FfiConverterULong.write(value.`createdAt`, buf)
+            FfiConverterULong.write(value.`lastUsedAt`, buf)
     }
 }
 
@@ -2504,6 +2831,36 @@ public object FfiConverterTypeWalletStateInfo: FfiConverterRustBuffer<WalletStat
             FfiConverterOptionalString.write(value.`autoFundError`, buf)
     }
 }
+
+
+
+
+enum class AddressTypeFfi {
+    
+    OUBLI,
+    STARKNET;
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressTypeFFI: FfiConverterRustBuffer<AddressTypeFfi> {
+    override fun read(buf: ByteBuffer) = try {
+        AddressTypeFfi.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AddressTypeFfi) = 4UL
+
+    override fun write(value: AddressTypeFfi, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -2841,6 +3198,38 @@ public object FfiConverterTypePlatformStorageCallback: FfiConverterCallbackInter
 /**
  * @suppress
  */
+public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
+    override fun read(buf: ByteBuffer): kotlin.ULong? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterULong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.ULong?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterULong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.ULong?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterULong.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?> {
     override fun read(buf: ByteBuffer): kotlin.Double? {
         if (buf.get().toInt() == 0) {
@@ -2895,6 +3284,38 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
         } else {
             buf.put(1)
             FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeContactFFI: FfiConverterRustBuffer<ContactFfi?> {
+    override fun read(buf: ByteBuffer): ContactFfi? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeContactFFI.read(buf)
+    }
+
+    override fun allocationSize(value: ContactFfi?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeContactFFI.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ContactFfi?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeContactFFI.write(value, buf)
         }
     }
 }
@@ -3011,6 +3432,62 @@ public object FfiConverterSequenceTypeActivityEventFFI: FfiConverterRustBuffer<L
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeActivityEventFFI.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeContactAddressFFI: FfiConverterRustBuffer<List<ContactAddressFfi>> {
+    override fun read(buf: ByteBuffer): List<ContactAddressFfi> {
+        val len = buf.getInt()
+        return List<ContactAddressFfi>(len) {
+            FfiConverterTypeContactAddressFFI.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ContactAddressFfi>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeContactAddressFFI.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ContactAddressFfi>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeContactAddressFFI.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeContactFFI: FfiConverterRustBuffer<List<ContactFfi>> {
+    override fun read(buf: ByteBuffer): List<ContactFfi> {
+        val len = buf.getInt()
+        return List<ContactFfi>(len) {
+            FfiConverterTypeContactFFI.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ContactFfi>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeContactFFI.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ContactFfi>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeContactFFI.write(it, buf)
         }
     }
 }

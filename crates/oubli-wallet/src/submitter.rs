@@ -126,9 +126,7 @@ impl TransactionSubmitter for PaymasterSubmitter {
             .map_err(|e| WalletError::Kms(format!("invalid tongo contract: {e}")))?;
 
         let approve_call = krusty_kms_client::build_erc20_approve(
-            erc20_addr,
-            tongo_addr,
-            0, // transfer 0 tokens — harmless no-op
+            erc20_addr, tongo_addr, 0, // transfer 0 tokens — harmless no-op
         )
         .map_err(|e| WalletError::Kms(e.to_string()))?;
 
@@ -143,8 +141,7 @@ impl TransactionSubmitter for PaymasterSubmitter {
             &build_resp.typed_data,
             &account.starknet_address,
         )?;
-        let (r, s) =
-            signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
+        let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
 
         let r_hex = format!("{:#066x}", r);
         let s_hex = format!("{:#066x}", s);
@@ -185,8 +182,7 @@ impl TransactionSubmitter for PaymasterSubmitter {
                 &build_resp.typed_data,
                 &account.starknet_address,
             )?;
-            let (r, s) =
-                signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
+            let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
 
             let r_hex = format!("{:#066x}", r);
             let s_hex = format!("{:#066x}", s);
@@ -214,8 +210,7 @@ impl TransactionSubmitter for PaymasterSubmitter {
                 &account.starknet_address,
             )?;
 
-            let (r, s) =
-                signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
+            let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
 
             let r_hex = format!("{:#066x}", r);
             let s_hex = format!("{:#066x}", s);
@@ -301,13 +296,8 @@ impl TransactionSubmitter for DirectSubmitter {
             Felt::from_bytes_be(&buf)
         };
 
-        let soa = SingleOwnerAccount::new(
-            provider,
-            signer,
-            address,
-            chain_id,
-            ExecutionEncoding::New,
-        );
+        let soa =
+            SingleOwnerAccount::new(provider, signer, address, chain_id, ExecutionEncoding::New);
 
         // Fetch nonce to verify connectivity (also cached by the account)
         let _nonce: Felt = soa

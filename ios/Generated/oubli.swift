@@ -530,19 +530,35 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 public protocol OubliWalletProtocol : AnyObject {
     
+    func calculateFee(amountSats: String)  -> String
+    
+    func calculateSendFee(amountSats: String, recipient: String)  -> String
+    
+    func deleteContact(contactId: String) throws 
+    
+    func findContactByAddress(address: String)  -> ContactFfi?
+    
     func generateMnemonic() throws  -> String
     
     func getActivity() throws  -> [ActivityEventFfi]
     
+    func getBtcPrice(currency: String)  -> Double?
+    
     func getBtcPriceUsd()  -> Double?
     
     func getCachedActivity()  -> [ActivityEventFfi]
+    
+    func getContacts()  -> [ContactFfi]
+    
+    func getFeePercent()  -> Double
     
     func getMnemonic() throws  -> String
     
     func getRpcUrl()  -> String
     
     func getState()  -> WalletStateInfo
+    
+    func getTransferRecipient(txHash: String)  -> String?
     
     func handleCompleteOnboarding(mnemonic: String) throws 
     
@@ -572,6 +588,8 @@ public protocol OubliWalletProtocol : AnyObject {
     
     func receiveLightningWait(swapId: String) throws 
     
+    func saveContact(contact: ContactFfi) throws  -> String
+    
     func swapBtcToWbtc(amountSats: UInt64, exactIn: Bool) throws  -> SwapQuoteFfi
     
     func swapExecute(swapId: String) throws 
@@ -585,6 +603,8 @@ public protocol OubliWalletProtocol : AnyObject {
     func swapStatus(swapId: String) throws  -> SwapStatusFfi
     
     func swapWbtcToBtc(amountSats: UInt64, btcAddress: String, exactIn: Bool) throws  -> SwapQuoteFfi
+    
+    func updateContactLastUsed(contactId: String) throws 
     
     func updateRpcUrl(url: String) 
     
@@ -629,11 +649,13 @@ open class OubliWallet:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_oubli_bridge_fn_clone_oubliwallet(self.pointer, $0) }
     }
-public convenience init(storage: PlatformStorageCallback)throws  {
+public convenience init(storage: PlatformStorageCallback, rpcUrl: String?, paymasterApiKey: String?)throws  {
     let pointer =
         try rustCallWithError(FfiConverterTypeOubliError.lift) {
     uniffi_oubli_bridge_fn_constructor_oubliwallet_new(
-        FfiConverterCallbackInterfacePlatformStorageCallback.lower(storage),$0
+        FfiConverterCallbackInterfacePlatformStorageCallback.lower(storage),
+        FfiConverterOptionString.lower(rpcUrl),
+        FfiConverterOptionString.lower(paymasterApiKey),$0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -650,6 +672,38 @@ public convenience init(storage: PlatformStorageCallback)throws  {
     
 
     
+open func calculateFee(amountSats: String) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(self.uniffiClonePointer(),
+        FfiConverterString.lower(amountSats),$0
+    )
+})
+}
+    
+open func calculateSendFee(amountSats: String, recipient: String) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(self.uniffiClonePointer(),
+        FfiConverterString.lower(amountSats),
+        FfiConverterString.lower(recipient),$0
+    )
+})
+}
+    
+open func deleteContact(contactId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+    uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(self.uniffiClonePointer(),
+        FfiConverterString.lower(contactId),$0
+    )
+}
+}
+    
+open func findContactByAddress(address: String) -> ContactFfi? {
+    return try!  FfiConverterOptionTypeContactFFI.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(self.uniffiClonePointer(),
+        FfiConverterString.lower(address),$0
+    )
+})
+}
+    
 open func generateMnemonic()throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_generate_mnemonic(self.uniffiClonePointer(),$0
@@ -664,6 +718,14 @@ open func getActivity()throws  -> [ActivityEventFfi] {
 })
 }
     
+open func getBtcPrice(currency: String) -> Double? {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(self.uniffiClonePointer(),
+        FfiConverterString.lower(currency),$0
+    )
+})
+}
+    
 open func getBtcPriceUsd() -> Double? {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price_usd(self.uniffiClonePointer(),$0
@@ -674,6 +736,20 @@ open func getBtcPriceUsd() -> Double? {
 open func getCachedActivity() -> [ActivityEventFfi] {
     return try!  FfiConverterSequenceTypeActivityEventFFI.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getContacts() -> [ContactFfi] {
+    return try!  FfiConverterSequenceTypeContactFFI.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getFeePercent() -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -695,6 +771,14 @@ open func getRpcUrl() -> String {
 open func getState() -> WalletStateInfo {
     return try!  FfiConverterTypeWalletStateInfo.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_state(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getTransferRecipient(txHash: String) -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(self.uniffiClonePointer(),
+        FfiConverterString.lower(txHash),$0
     )
 })
 }
@@ -806,6 +890,14 @@ open func receiveLightningWait(swapId: String)throws  {try rustCallWithError(Ffi
 }
 }
     
+open func saveContact(contact: ContactFfi)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+    uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(self.uniffiClonePointer(),
+        FfiConverterTypeContactFFI.lower(contact),$0
+    )
+})
+}
+    
 open func swapBtcToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi {
     return try  FfiConverterTypeSwapQuoteFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(self.uniffiClonePointer(),
@@ -862,6 +954,13 @@ open func swapWbtcToBtc(amountSats: UInt64, btcAddress: String, exactIn: Bool)th
         FfiConverterBool.lower(exactIn),$0
     )
 })
+}
+    
+open func updateContactLastUsed(contactId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+    uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(self.uniffiClonePointer(),
+        FfiConverterString.lower(contactId),$0
+    )
+}
 }
     
 open func updateRpcUrl(url: String) {try! rustCall() {
@@ -938,14 +1037,20 @@ public struct ActivityEventFfi {
     public var amountSats: String?
     public var txHash: String
     public var blockNumber: UInt64
+    public var timestampSecs: UInt64?
+    public var status: String
+    public var explorerUrl: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventType: String, amountSats: String?, txHash: String, blockNumber: UInt64) {
+    public init(eventType: String, amountSats: String?, txHash: String, blockNumber: UInt64, timestampSecs: UInt64?, status: String, explorerUrl: String?) {
         self.eventType = eventType
         self.amountSats = amountSats
         self.txHash = txHash
         self.blockNumber = blockNumber
+        self.timestampSecs = timestampSecs
+        self.status = status
+        self.explorerUrl = explorerUrl
     }
 }
 
@@ -965,6 +1070,15 @@ extension ActivityEventFfi: Equatable, Hashable {
         if lhs.blockNumber != rhs.blockNumber {
             return false
         }
+        if lhs.timestampSecs != rhs.timestampSecs {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.explorerUrl != rhs.explorerUrl {
+            return false
+        }
         return true
     }
 
@@ -973,6 +1087,9 @@ extension ActivityEventFfi: Equatable, Hashable {
         hasher.combine(amountSats)
         hasher.combine(txHash)
         hasher.combine(blockNumber)
+        hasher.combine(timestampSecs)
+        hasher.combine(status)
+        hasher.combine(explorerUrl)
     }
 }
 
@@ -987,7 +1104,10 @@ public struct FfiConverterTypeActivityEventFFI: FfiConverterRustBuffer {
                 eventType: FfiConverterString.read(from: &buf), 
                 amountSats: FfiConverterOptionString.read(from: &buf), 
                 txHash: FfiConverterString.read(from: &buf), 
-                blockNumber: FfiConverterUInt64.read(from: &buf)
+                blockNumber: FfiConverterUInt64.read(from: &buf), 
+                timestampSecs: FfiConverterOptionUInt64.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                explorerUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -996,6 +1116,9 @@ public struct FfiConverterTypeActivityEventFFI: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.amountSats, into: &buf)
         FfiConverterString.write(value.txHash, into: &buf)
         FfiConverterUInt64.write(value.blockNumber, into: &buf)
+        FfiConverterOptionUInt64.write(value.timestampSecs, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.explorerUrl, into: &buf)
     }
 }
 
@@ -1012,6 +1135,178 @@ public func FfiConverterTypeActivityEventFFI_lift(_ buf: RustBuffer) throws -> A
 #endif
 public func FfiConverterTypeActivityEventFFI_lower(_ value: ActivityEventFfi) -> RustBuffer {
     return FfiConverterTypeActivityEventFFI.lower(value)
+}
+
+
+public struct ContactAddressFfi {
+    public var address: String
+    public var addressType: AddressTypeFfi
+    public var label: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, addressType: AddressTypeFfi, label: String?) {
+        self.address = address
+        self.addressType = addressType
+        self.label = label
+    }
+}
+
+
+
+extension ContactAddressFfi: Equatable, Hashable {
+    public static func ==(lhs: ContactAddressFfi, rhs: ContactAddressFfi) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.addressType != rhs.addressType {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(addressType)
+        hasher.combine(label)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContactAddressFFI: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContactAddressFfi {
+        return
+            try ContactAddressFfi(
+                address: FfiConverterString.read(from: &buf), 
+                addressType: FfiConverterTypeAddressTypeFFI.read(from: &buf), 
+                label: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ContactAddressFfi, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterTypeAddressTypeFFI.write(value.addressType, into: &buf)
+        FfiConverterOptionString.write(value.label, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactAddressFFI_lift(_ buf: RustBuffer) throws -> ContactAddressFfi {
+    return try FfiConverterTypeContactAddressFFI.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactAddressFFI_lower(_ value: ContactAddressFfi) -> RustBuffer {
+    return FfiConverterTypeContactAddressFFI.lower(value)
+}
+
+
+public struct ContactFfi {
+    public var id: String
+    public var name: String
+    public var addresses: [ContactAddressFfi]
+    public var notes: String?
+    public var createdAt: UInt64
+    public var lastUsedAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, addresses: [ContactAddressFfi], notes: String?, createdAt: UInt64, lastUsedAt: UInt64) {
+        self.id = id
+        self.name = name
+        self.addresses = addresses
+        self.notes = notes
+        self.createdAt = createdAt
+        self.lastUsedAt = lastUsedAt
+    }
+}
+
+
+
+extension ContactFfi: Equatable, Hashable {
+    public static func ==(lhs: ContactFfi, rhs: ContactFfi) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.addresses != rhs.addresses {
+            return false
+        }
+        if lhs.notes != rhs.notes {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.lastUsedAt != rhs.lastUsedAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+        hasher.combine(addresses)
+        hasher.combine(notes)
+        hasher.combine(createdAt)
+        hasher.combine(lastUsedAt)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContactFFI: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContactFfi {
+        return
+            try ContactFfi(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                addresses: FfiConverterSequenceTypeContactAddressFFI.read(from: &buf), 
+                notes: FfiConverterOptionString.read(from: &buf), 
+                createdAt: FfiConverterUInt64.read(from: &buf), 
+                lastUsedAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ContactFfi, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterSequenceTypeContactAddressFFI.write(value.addresses, into: &buf)
+        FfiConverterOptionString.write(value.notes, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterUInt64.write(value.lastUsedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactFFI_lift(_ buf: RustBuffer) throws -> ContactFfi {
+    return try FfiConverterTypeContactFFI.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactFFI_lower(_ value: ContactFfi) -> RustBuffer {
+    return FfiConverterTypeContactFFI.lower(value)
 }
 
 
@@ -1596,6 +1891,70 @@ public func FfiConverterTypeWalletStateInfo_lower(_ value: WalletStateInfo) -> R
     return FfiConverterTypeWalletStateInfo.lower(value)
 }
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AddressTypeFfi {
+    
+    case oubli
+    case starknet
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressTypeFFI: FfiConverterRustBuffer {
+    typealias SwiftType = AddressTypeFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressTypeFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .oubli
+        
+        case 2: return .starknet
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddressTypeFfi, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .oubli:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .starknet:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressTypeFFI_lift(_ buf: RustBuffer) throws -> AddressTypeFfi {
+    return try FfiConverterTypeAddressTypeFFI.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressTypeFFI_lower(_ value: AddressTypeFfi) -> RustBuffer {
+    return FfiConverterTypeAddressTypeFFI.lower(value)
+}
+
+
+
+extension AddressTypeFfi: Equatable, Hashable {}
+
+
+
 
 public enum OubliError {
 
@@ -2071,6 +2430,30 @@ extension FfiConverterCallbackInterfacePlatformStorageCallback : FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = UInt64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
     typealias SwiftType = Double?
 
@@ -2111,6 +2494,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeContactFFI: FfiConverterRustBuffer {
+    typealias SwiftType = ContactFfi?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeContactFFI.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeContactFFI.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -2218,6 +2625,56 @@ fileprivate struct FfiConverterSequenceTypeActivityEventFFI: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeContactAddressFFI: FfiConverterRustBuffer {
+    typealias SwiftType = [ContactAddressFfi]
+
+    public static func write(_ value: [ContactAddressFfi], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeContactAddressFFI.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ContactAddressFfi] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ContactAddressFfi]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeContactAddressFFI.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeContactFFI: FfiConverterRustBuffer {
+    typealias SwiftType = [ContactFfi]
+
+    public static func write(_ value: [ContactFfi], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeContactFFI.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ContactFfi] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ContactFfi]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeContactFFI.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSwapSummaryFFI: FfiConverterRustBuffer {
     typealias SwiftType = [SwapSummaryFfi]
 
@@ -2305,16 +2762,37 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee() != 48584) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee() != 20848) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact() != 32744) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address() != 34436) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_generate_mnemonic() != 23503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_activity() != 36475) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price() != 55702) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price_usd() != 65337) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_cached_activity() != 4114) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_contacts() != 8394) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_fee_percent() != 8285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_mnemonic() != 50822) {
@@ -2324,6 +2802,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_state() != 42679) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_get_transfer_recipient() != 24174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_handle_complete_onboarding() != 8443) {
@@ -2368,6 +2849,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait() != 42286) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact() != 3700) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc() != 49103) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2389,13 +2873,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_swap_wbtc_to_btc() != 55933) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_oubli_bridge_checksum_method_oubliwallet_update_contact_last_used() != 18417) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url() != 31864) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic() != 25697) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 63484) {
+    if (uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 52574) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store() != 9671) {

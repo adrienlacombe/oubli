@@ -10,10 +10,7 @@ pub use krusty_kms_client::starknet_rust::core::types::typed_data::TypedData;
 /// Compute SNIP-12 message hash using starknet-rs's well-tested TypedData implementation.
 /// Supports both revision 0 (Pedersen) and revision 1 (Poseidon), including enums,
 /// merkle trees, u256, preset types, etc.
-pub fn compute_message_hash(
-    typed_data: &TypedData,
-    account: &Felt,
-) -> Result<Felt, WalletError> {
+pub fn compute_message_hash(typed_data: &TypedData, account: &Felt) -> Result<Felt, WalletError> {
     // Convert starknet-types-core Felt to starknet-rs Felt
     let account_rs =
         krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(&account.to_bytes_be());
@@ -90,12 +87,7 @@ pub fn compute_outside_execution_hash(
             .map(|(i, v)| json_felt(Some(v), &format!("Calldata[{i}]")))
             .collect::<Result<_, _>>()?;
         let cd_hash = poseidon_hash_many(&cd_felts);
-        call_hashes.push(poseidon_hash_many(&[
-            call_type_hash,
-            to,
-            selector,
-            cd_hash,
-        ]));
+        call_hashes.push(poseidon_hash_many(&[call_type_hash, to, selector, cd_hash]));
     }
     let calls_hash = poseidon_hash_many(&call_hashes);
 
@@ -115,7 +107,12 @@ pub fn compute_outside_execution_hash(
     ]);
 
     // Final SNIP-12 message hash
-    Ok(poseidon_hash_many(&[prefix, domain_hash, *account, oe_hash]))
+    Ok(poseidon_hash_many(&[
+        prefix,
+        domain_hash,
+        *account,
+        oe_hash,
+    ]))
 }
 
 /// Convert starknet-rs Felt to starknet-types-core Felt.
@@ -166,13 +163,11 @@ pub fn parse_typed_data(json: &serde_json::Value) -> Result<TypedData, WalletErr
 
 /// Sign a message hash with starknet private key (ECDSA on Stark curve).
 /// Returns (r, s) as Felt values.
-pub fn sign_message_hash(
-    hash: &Felt,
-    private_key: &Felt,
-) -> Result<(Felt, Felt), WalletError> {
+pub fn sign_message_hash(hash: &Felt, private_key: &Felt) -> Result<(Felt, Felt), WalletError> {
     // Convert to starknet-rs Felt for signing
-    let sk_rs =
-        krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(&private_key.to_bytes_be());
+    let sk_rs = krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(
+        &private_key.to_bytes_be(),
+    );
     let hash_rs =
         krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(&hash.to_bytes_be());
 
@@ -197,9 +192,7 @@ pub fn validate_typed_data_calls(
     // Extract calls from the message
     let message = typed_data_json
         .get("message")
-        .ok_or_else(|| {
-            WalletError::TypedDataValidation("no message field in typed data".into())
-        })?;
+        .ok_or_else(|| WalletError::TypedDataValidation("no message field in typed data".into()))?;
 
     let msg_calls = message
         .get("calls")
@@ -227,8 +220,12 @@ pub fn validate_typed_data_calls(
             )));
         }
 
-        let msg_sel = msg_call.get("Selector").or_else(|| msg_call.get("selector"));
-        let exp_sel = expected.get("Selector").or_else(|| expected.get("selector"));
+        let msg_sel = msg_call
+            .get("Selector")
+            .or_else(|| msg_call.get("selector"));
+        let exp_sel = expected
+            .get("Selector")
+            .or_else(|| expected.get("selector"));
         if msg_sel != exp_sel {
             return Err(WalletError::TypedDataValidation(format!(
                 "call[{i}] selector mismatch"
@@ -246,14 +243,12 @@ mod tests {
     #[test]
     fn test_sign_and_verify() {
         // Use a deterministic test key
-        let private_key = Felt::from_hex(
-            "0x0139fe4d6f02e666e86a6f58e65060f115cd3c185bd9e98bd829636931458f79",
-        )
-        .unwrap();
-        let message_hash = Felt::from_hex(
-            "0x06fea80189363a786037ed3e7ba546dad0ef7de49fccae0e31eb658b7dd4ea76",
-        )
-        .unwrap();
+        let private_key =
+            Felt::from_hex("0x0139fe4d6f02e666e86a6f58e65060f115cd3c185bd9e98bd829636931458f79")
+                .unwrap();
+        let message_hash =
+            Felt::from_hex("0x06fea80189363a786037ed3e7ba546dad0ef7de49fccae0e31eb658b7dd4ea76")
+                .unwrap();
 
         let (r, s) = sign_message_hash(&message_hash, &private_key).unwrap();
         assert_ne!(r, Felt::ZERO);
@@ -339,10 +334,8 @@ mod tests {
         // Known-good value from starknet-rs test suite
         assert_eq!(
             hash,
-            Felt::from_hex(
-                "0x045bca39274d2b7fdf7dc7c4ecf75f6549f614ce44359cc62ec106f4e5cc87b4"
-            )
-            .unwrap()
+            Felt::from_hex("0x045bca39274d2b7fdf7dc7c4ecf75f6549f614ce44359cc62ec106f4e5cc87b4")
+                .unwrap()
         );
     }
 }

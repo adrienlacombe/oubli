@@ -13,22 +13,30 @@ struct LockedView: View {
 
             Image(systemName: "lock.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.oubliOnSurfaceVariant)
+                .accessibilityHidden(true)
 
             Text("Wallet Locked")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Authenticate to access your wallet.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
+
 
             if let errorMessage = viewModel.biometricUnlockError {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(Color.oubliError)
+                        .accessibilityHidden(true)
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundColor(Color.oubliError)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
             }
 
             Spacer()
@@ -42,7 +50,7 @@ struct LockedView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            Spacer().frame(height: 40)
         }
         .onAppear {
             if !hasFiredAutoBiometric {

@@ -1,5 +1,5 @@
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, AeadCore, Nonce};
+use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 
 use crate::error::BackupError;
@@ -59,8 +59,8 @@ impl CloudBackup {
         OsRng.fill_bytes(&mut salt);
 
         let key = Self::derive_key(password, &salt)?;
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .map_err(|e| BackupError::Encryption(e.to_string()))?;
+        let cipher =
+            Aes256Gcm::new_from_slice(&key).map_err(|e| BackupError::Encryption(e.to_string()))?;
         let nonce_val = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce_val, mnemonic.as_bytes())
@@ -79,8 +79,8 @@ impl CloudBackup {
     /// Decrypt a cloud backup payload with the user's password.
     pub fn decrypt(payload: &CloudBackupPayload, password: &str) -> Result<String, BackupError> {
         let key = Self::derive_key(password, &payload.salt)?;
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .map_err(|e| BackupError::Decryption(e.to_string()))?;
+        let cipher =
+            Aes256Gcm::new_from_slice(&key).map_err(|e| BackupError::Decryption(e.to_string()))?;
         let nonce = Nonce::from_slice(&payload.nonce);
         let plaintext = cipher
             .decrypt(nonce, payload.ciphertext.as_slice())
@@ -89,8 +89,13 @@ impl CloudBackup {
     }
 
     fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], BackupError> {
-        let params = Params::new(ARGON2_M_COST_KB, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LEN))
-            .map_err(|e| BackupError::Encryption(e.to_string()))?;
+        let params = Params::new(
+            ARGON2_M_COST_KB,
+            ARGON2_T_COST,
+            ARGON2_P_COST,
+            Some(KEY_LEN),
+        )
+        .map_err(|e| BackupError::Encryption(e.to_string()))?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut key = [0u8; KEY_LEN];
         argon2

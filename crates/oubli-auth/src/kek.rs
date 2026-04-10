@@ -8,9 +8,9 @@ pub struct KekDerivation;
 
 /// Argon2id parameters for KEK derivation.
 const ARGON2_M_COST_KB: u32 = 64 * 1024; // 64 MB
-const ARGON2_T_COST: u32 = 3;            // 3 iterations
-const ARGON2_P_COST: u32 = 4;            // 4 parallel lanes
-const KEK_LEN: usize = 32;               // AES-256 key size
+const ARGON2_T_COST: u32 = 3; // 3 iterations
+const ARGON2_P_COST: u32 = 4; // 4 parallel lanes
+const KEK_LEN: usize = 32; // AES-256 key size
 
 /// Fixed app-level context used as the Argon2id password input.
 /// All real entropy comes from the hardware-backed salt.
@@ -24,8 +24,13 @@ impl KekDerivation {
     /// context string is used as the Argon2id password input; all real
     /// entropy comes from the salt.
     pub fn derive_kek(salt: &[u8]) -> Result<Zeroizing<[u8; KEK_LEN]>, AuthError> {
-        let params = Params::new(ARGON2_M_COST_KB, ARGON2_T_COST, ARGON2_P_COST, Some(KEK_LEN))
-            .map_err(|e| AuthError::KekDerivation(e.to_string()))?;
+        let params = Params::new(
+            ARGON2_M_COST_KB,
+            ARGON2_T_COST,
+            ARGON2_P_COST,
+            Some(KEK_LEN),
+        )
+        .map_err(|e| AuthError::KekDerivation(e.to_string()))?;
 
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 

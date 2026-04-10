@@ -42,9 +42,13 @@ All operations go through `WalletCore` methods which manage state transitions, p
 
 ## Networks
 
-Default: **mainnet**. Sepolia available via env vars. Network configs use `env!()` compile-time macros for RPC URLs.
+Default: **Sepolia** for local development. Mainnet should be selected explicitly. Network configs use compile-time env vars for baked defaults and runtime env vars for overrides.
 
 ```bash
-# Build requires env vars
-source .env && cargo build -p oubli-wallet
+# Safe local setup
+cp .sepolia.env.example .sepolia.env
+make env-status
+make test-offline
 ```
+
+For cross-cutting edits, start with the repo-level [`docs/change-map.md`](../../docs/change-map.md).

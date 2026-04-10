@@ -2,17 +2,21 @@ package com.oubli.wallet.ui
 
 import android.app.Activity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -20,13 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.oubli.wallet.ui.balance.BalanceScreen
+import com.oubli.wallet.viewmodel.ScreenState
 import com.oubli.wallet.viewmodel.WalletViewModel
-import uniffi.oubli.WalletStateFfi
 
 @Composable
 fun MainScreen(
-    walletViewModel: WalletViewModel = viewModel(),
+    walletViewModel: WalletViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -38,35 +44,30 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        walletViewModel.errorEvents.collect { message ->
-            val result = snackbarHostState.showSnackbar(
-                message = message,
-                actionLabel = "Copy",
-                duration = androidx.compose.material3.SnackbarDuration.Long,
-            )
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Error", message))
-                android.widget.Toast.makeText(context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+    val state by walletViewModel.uiState.collectAsStateWithLifecycle()
+    val lightningOperation by walletViewModel.lightningOperation.collectAsStateWithLifecycle()
+
+    // Show user messages via snackbar
+    val userMessage = state.userMessage
+    LaunchedEffect(userMessage) {
+        if (userMessage != null) {
+            if (userMessage.isError) {
+                val result = snackbarHostState.showSnackbar(
+                    message = userMessage.text,
+                    actionLabel = "Copy",
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Error", userMessage.text))
+                    walletViewModel.showMessage("Copied to clipboard")
+                }
+            } else {
+                snackbarHostState.showSnackbar(userMessage.text)
             }
+            walletViewModel.onMessageShown(userMessage.id)
         }
     }
-
-    LaunchedEffect(Unit) {
-        walletViewModel.successEvents.collect { message ->
-            snackbarHostState.showSnackbar(message)
-        }
-    }
-
-    val state by walletViewModel.uiState.collectAsState()
-    val seedBackup by walletViewModel.seedBackupState.collectAsState()
-    val isBalanceHidden by walletViewModel.isBalanceHidden.collectAsState()
-    val showUsd by walletViewModel.showUsd.collectAsState()
-    val isRefreshing by walletViewModel.isRefreshing.collectAsState()
-    val activity by walletViewModel.activity.collectAsState()
-    val lightningOperation by walletViewModel.lightningOperation.collectAsState()
-    val biometricUnlockError by walletViewModel.biometricUnlockError.collectAsState()
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -76,84 +77,94 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when (state.state) {
-                WalletStateFfi.ONBOARDING -> {
+            when (val screen = state.screenState) {
+                is ScreenState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is ScreenState.Onboarding -> {
                     OnboardingScreen(
                         onGenerateMnemonic = { callback -> walletViewModel.generateMnemonic(callback) },
                         onValidateMnemonic = { phrase, callback -> walletViewModel.validateMnemonic(phrase, callback) },
                         onComplete = { mnemonic -> walletViewModel.completeOnboarding(mnemonic) },
+                        onShowMessage = { walletViewModel.showMessage(it) },
                     )
                 }
 
-                WalletStateFfi.LOCKED -> {
+                is ScreenState.Locked -> {
                     LockedScreen(
-                        unlockError = biometricUnlockError,
+                        unlockError = screen.unlockError,
                         onUnlockBiometric = { walletViewModel.unlockBiometric() },
                     )
                 }
 
-                WalletStateFfi.READY -> {
+                is ScreenState.Ready -> {
                     BalanceScreen(
-                        address = state.address.orEmpty(),
-                        publicKey = state.publicKey.orEmpty(),
-                        balanceSats = state.balanceSats ?: "0",
-                        pendingSats = state.pendingSats ?: "0",
-                        isBalanceHidden = isBalanceHidden,
-                        showUsd = showUsd,
+                        address = screen.address,
+                        publicKey = screen.publicKey,
+                        balanceSats = screen.balanceSats,
+                        pendingSats = screen.pendingSats,
+                        isBalanceHidden = screen.isBalanceHidden,
+                        showFiat = screen.showFiat,
+                        fiatCurrency = screen.fiatCurrency,
                         onToggleCurrency = { walletViewModel.toggleCurrency() },
-                        satsToUsd = { walletViewModel.satsToUsd(it) },
-                        activity = activity,
+                        onSetFiatCurrency = { walletViewModel.setFiatCurrency(it) },
+                        satsToFiat = { walletViewModel.satsToFiat(it) },
+                        activity = screen.activity,
                         onToggleBalanceHidden = { walletViewModel.toggleBalanceHidden() },
                         onRefresh = { walletViewModel.refreshBalance() },
                         onSend = { amount, recipient -> walletViewModel.send(amount, recipient) },
+                        onCalculateSendFee = { amount, recipient ->
+                            walletViewModel.calculateSendFee(amount, recipient)
+                        },
                         onPayLightning = { bolt11, onResult -> walletViewModel.payLightningWithCallback(bolt11, onResult) },
                         lightningOperation = lightningOperation,
                         onReceiveLightningCreate = { amount, onResult -> walletViewModel.receiveLightningCreateInvoice(amount, onResult) },
                         onReceiveLightningWait = { swapId, onResult -> walletViewModel.receiveLightningWait(swapId, onResult) },
-                        onGetRpcUrl = { walletViewModel.getRpcUrl() },
-                        onUpdateRpcUrl = { url -> walletViewModel.updateRpcUrl(url) },
                         onGetMnemonic = { onResult -> walletViewModel.getMnemonic(onResult) },
-                        autoFundError = state.autoFundError,
-                        isRefreshing = isRefreshing,
+                        contacts = screen.contacts,
+                        onSaveContact = { walletViewModel.saveContact(it) },
+                        onDeleteContact = { walletViewModel.deleteContact(it) },
+                        satsToFiatRaw = { walletViewModel.satsToFiatRaw(it) },
+                        fiatToSats = { walletViewModel.fiatToSats(it) },
+                        autoFundError = screen.autoFundError,
+                        isRefreshing = screen.isRefreshing,
+                        activityContactNames = screen.activityContactNames,
+                        onShowMessage = { walletViewModel.showMessage(it) },
                     )
                 }
 
-                WalletStateFfi.PROCESSING -> {
+                is ScreenState.Processing -> {
                     ProcessingScreen(
-                        address = state.address.orEmpty(),
-                        operation = state.operation ?: "Processing...",
+                        address = screen.address,
+                        operation = screen.operation,
                     )
                 }
 
-                WalletStateFfi.ERROR -> {
+                is ScreenState.Error -> {
                     ErrorScreen(
-                        message = state.errorMessage ?: "An unknown error occurred.",
+                        message = screen.message,
                         onRetry = { walletViewModel.refreshBalance() },
                     )
                 }
 
-                WalletStateFfi.SEED_BACKUP -> {
-                    val backupState = seedBackup
-                    if (backupState != null) {
-                        SeedBackupScreen(
-                            wordGroups = backupState.wordGroups,
-                            prompts = backupState.prompts,
-                            onVerifyWord = { index, answer, callback ->
-                                walletViewModel.verifySeedWord(index, answer, callback)
-                            },
-                            onDone = { walletViewModel.refreshBalance() },
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
+                is ScreenState.SeedBackup -> {
+                    SeedBackupScreen(
+                        wordGroups = screen.backupState.wordGroups,
+                        prompts = screen.backupState.prompts,
+                        onVerifyWord = { index, answer, callback ->
+                            walletViewModel.verifySeedWord(index, answer, callback)
+                        },
+                        onDone = { walletViewModel.refreshBalance() },
+                    )
                 }
 
-                WalletStateFfi.WIPED -> {
+                is ScreenState.Wiped -> {
                     WipedScreen(
                         onRestart = {
                             (context as? Activity)?.recreate()
@@ -173,11 +184,11 @@ private fun ProcessingScreen(address: String, operation: String) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Column(
+        Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CircularProgressIndicator()
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(16.dp))
+            Spacer(modifier = Modifier.padding(16.dp))
             Text(text = operation, style = MaterialTheme.typography.titleMedium)
             if (address.isNotEmpty()) {
                 Text(
@@ -196,7 +207,7 @@ private fun ErrorScreen(message: String, onRetry: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Column(
+        Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp),
         ) {
@@ -205,10 +216,10 @@ private fun ErrorScreen(message: String, onRetry: () -> Unit) {
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(8.dp))
+            Spacer(modifier = Modifier.padding(8.dp))
             Text(text = message, style = MaterialTheme.typography.bodyMedium)
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(16.dp))
-            androidx.compose.material3.Button(onClick = onRetry) { Text("Retry") }
+            Spacer(modifier = Modifier.padding(16.dp))
+            Button(onClick = onRetry) { Text("Retry") }
         }
     }
 }
@@ -219,18 +230,18 @@ private fun WipedScreen(onRestart: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Column(
+        Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp),
         ) {
             Text(text = "Wallet Wiped", style = MaterialTheme.typography.headlineSmall)
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(8.dp))
+            Spacer(modifier = Modifier.padding(8.dp))
             Text(
                 text = "All data has been erased for your security.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(16.dp))
-            androidx.compose.material3.Button(onClick = onRestart) { Text("Set Up New Wallet") }
+            Spacer(modifier = Modifier.padding(16.dp))
+            Button(onClick = onRestart) { Text("Set Up New Wallet") }
         }
     }
 }

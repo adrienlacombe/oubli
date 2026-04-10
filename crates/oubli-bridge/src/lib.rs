@@ -99,7 +99,9 @@ impl From<oubli_wallet::WalletError> for OubliError {
             oubli_wallet::WalletError::InvalidState { .. } => OubliError::InvalidState,
             oubli_wallet::WalletError::NoActiveAccount => OubliError::NoActiveAccount,
             oubli_wallet::WalletError::Denomination(_) => OubliError::Denomination,
-            oubli_wallet::WalletError::InsufficientBalance { .. } => OubliError::InsufficientBalance,
+            oubli_wallet::WalletError::InsufficientBalance { .. } => {
+                OubliError::InsufficientBalance
+            }
             oubli_wallet::WalletError::Network(_) => OubliError::Network,
             oubli_wallet::WalletError::OperationInProgress => OubliError::InvalidState,
             oubli_wallet::WalletError::Signing(_) => OubliError::Kms,
@@ -154,6 +156,9 @@ pub struct ActivityEventFFI {
     pub amount_sats: Option<String>,
     pub tx_hash: String,
     pub block_number: u64,
+    pub timestamp_secs: Option<u64>,
+    pub status: String,
+    pub explorer_url: Option<String>,
 }
 
 // ── Swap FFI types ──────────────────────────────────────────
@@ -190,6 +195,93 @@ pub struct SwapLimitsFFI {
     pub input_max: Option<String>,
     pub output_min: String,
     pub output_max: Option<String>,
+}
+
+// ── Contact FFI types ────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub enum AddressTypeFFI {
+    Oubli,
+    Starknet,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContactAddressFFI {
+    pub address: String,
+    pub address_type: AddressTypeFFI,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContactFFI {
+    pub id: String,
+    pub name: String,
+    pub addresses: Vec<ContactAddressFFI>,
+    pub notes: Option<String>,
+    pub created_at: u64,
+    pub last_used_at: u64,
+}
+
+impl From<oubli_wallet::Contact> for ContactFFI {
+    fn from(c: oubli_wallet::Contact) -> Self {
+        ContactFFI {
+            id: c.id,
+            name: c.name,
+            addresses: c
+                .addresses
+                .into_iter()
+                .map(|a| ContactAddressFFI {
+                    address: a.address,
+                    address_type: match a.address_type {
+                        oubli_wallet::AddressType::Oubli => AddressTypeFFI::Oubli,
+                        oubli_wallet::AddressType::Starknet => AddressTypeFFI::Starknet,
+                    },
+                    label: a.label,
+                })
+                .collect(),
+            notes: c.notes,
+            created_at: c.created_at,
+            last_used_at: c.last_used_at,
+        }
+    }
+}
+
+impl From<ContactFFI> for oubli_wallet::Contact {
+    fn from(c: ContactFFI) -> Self {
+        oubli_wallet::Contact {
+            id: c.id,
+            name: c.name,
+            addresses: c
+                .addresses
+                .into_iter()
+                .map(|a| oubli_wallet::ContactAddress {
+                    address: a.address,
+                    address_type: match a.address_type {
+                        AddressTypeFFI::Oubli => oubli_wallet::AddressType::Oubli,
+                        AddressTypeFFI::Starknet => oubli_wallet::AddressType::Starknet,
+                    },
+                    label: a.label,
+                })
+                .collect(),
+            notes: c.notes,
+            created_at: c.created_at,
+            last_used_at: c.last_used_at,
+        }
+    }
+}
+
+fn tx_explorer_url(chain_id: &str, tx_hash: &str) -> Option<String> {
+    if tx_hash.trim().is_empty() {
+        return None;
+    }
+
+    let base = match chain_id {
+        "SN_MAIN" => "https://starkscan.co/tx/",
+        "SN_SEPOLIA" => "https://sepolia.starkscan.co/tx/",
+        _ => return None,
+    };
+
+    Some(format!("{base}{tx_hash}"))
 }
 
 // ── Platform storage callback ────────────────────────────────
@@ -343,12 +435,31 @@ pub struct OubliWallet {
     seed_prompts: Mutex<Vec<VerificationPrompt>>,
     /// When true the background thread polls `handle_refresh_balance`.
     polling_active: Arc<AtomicBool>,
+    /// BTC price cache independent of the core mutex to avoid deadlocks.
+    /// Keyed by lowercase currency code (e.g. "usd", "eur").
+    btc_price_cache: Mutex<std::collections::HashMap<String, (f64, std::time::Instant)>>,
 }
 
 impl OubliWallet {
-    pub fn new(storage: Box<dyn PlatformStorageCallback>) -> Result<Self, OubliError> {
+    pub fn new(
+        storage: Box<dyn PlatformStorageCallback>,
+        rpc_url: Option<String>,
+        paymaster_api_key: Option<String>,
+    ) -> Result<Self, OubliError> {
         let adapter = PlatformStorageAdapter { callback: storage };
-        let config = NetworkConfig::from_env();
+        let mut config = NetworkConfig::from_env();
+        if let Some(url) = rpc_url {
+            if !url.trim().is_empty() {
+                if let Err(err) = config.set_rpc_url(&url) {
+                    eprintln!("[oubli] ignoring invalid RPC override: {err}");
+                }
+            }
+        }
+        if let Some(key) = paymaster_api_key {
+            if !key.is_empty() {
+                config.paymaster_api_key = Some(key);
+            }
+        }
         let core = WalletCore::new(Box::new(adapter), config);
 
         let runtime = Arc::new(
@@ -373,15 +484,13 @@ impl OubliWallet {
             let poll_flag = Arc::clone(&polling_active);
             std::thread::Builder::new()
                 .name("oubli-poll".into())
-                .spawn(move || {
-                    loop {
-                        std::thread::sleep(Duration::from_secs(POLL_INTERVAL_SECS));
-                        if !poll_flag.load(Ordering::Relaxed) {
-                            continue;
-                        }
-                        if let Ok(mut core) = poll_core.try_lock() {
-                            let _ = poll_handle.block_on(core.handle_refresh_balance());
-                        }
+                .spawn(move || loop {
+                    std::thread::sleep(Duration::from_secs(POLL_INTERVAL_SECS));
+                    if !poll_flag.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    if let Ok(mut core) = poll_core.try_lock() {
+                        let _ = poll_handle.block_on(core.handle_refresh_balance());
                     }
                 })
                 .ok();
@@ -393,18 +502,20 @@ impl OubliWallet {
             seed_flow: Mutex::new(None),
             seed_prompts: Mutex::new(Vec::new()),
             polling_active,
+            btc_price_cache: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
     pub fn get_state(&self) -> WalletStateInfo {
         let core = self.core.lock().unwrap();
-        wallet_state_to_ffi(core.state(), core.owner_public_key(), core.last_auto_fund_error())
+        wallet_state_to_ffi(
+            core.state(),
+            core.owner_public_key(),
+            core.last_auto_fund_error(),
+        )
     }
 
-    pub fn handle_complete_onboarding(
-        &self,
-        mnemonic: String,
-    ) -> Result<(), OubliError> {
+    pub fn handle_complete_onboarding(&self, mnemonic: String) -> Result<(), OubliError> {
         let mut core = self.core.lock().unwrap();
         self.runtime
             .block_on(core.handle_onboarding(&mnemonic))
@@ -492,7 +603,10 @@ impl OubliWallet {
 
     pub fn update_rpc_url(&self, url: String) {
         let mut core = self.core.lock().unwrap();
-        let _ = core.update_rpc_url(url);
+        if let Err(err) = core.update_rpc_url(url) {
+            set_error_msg(err.to_string());
+            eprintln!("[oubli] update_rpc_url failed: {err}");
+        }
     }
 
     pub fn get_rpc_url(&self) -> String {
@@ -504,8 +618,7 @@ impl OubliWallet {
         &self,
         mnemonic: String,
     ) -> Result<SeedBackupStateFFI, OubliError> {
-        let flow =
-            SeedDisplayFlow::new(&mnemonic).map_err(|e| backup_err(e.to_string()))?;
+        let flow = SeedDisplayFlow::new(&mnemonic).map_err(|e| backup_err(e.to_string()))?;
 
         let groups: Vec<Vec<String>> = flow.word_groups().into_iter().map(|g| g.words).collect();
 
@@ -544,33 +657,63 @@ impl OubliWallet {
     }
 
     pub fn get_btc_price_usd(&self) -> Option<f64> {
-        let mut core = self.core.lock().unwrap();
-        self.runtime.block_on(core.get_btc_price_usd())
+        self.get_btc_price("usd".to_string())
+    }
+
+    pub fn get_btc_price(&self, currency: String) -> Option<f64> {
+        let key = currency.to_lowercase();
+        // Use bridge-level cache to avoid blocking on the core mutex.
+        {
+            let cache = self.btc_price_cache.lock().unwrap();
+            if let Some((price, fetched_at)) = cache.get(&key) {
+                if fetched_at.elapsed() < std::time::Duration::from_secs(3600) {
+                    return Some(*price);
+                }
+            }
+        }
+        let price = fetch_btc_price_blocking(&key)?;
+        let mut cache = self.btc_price_cache.lock().unwrap();
+        cache.insert(key, (price, std::time::Instant::now()));
+        Some(price)
     }
 
     pub fn get_activity(&self) -> Result<Vec<ActivityEventFFI>, OubliError> {
         let core = self.core.lock().unwrap();
+        let chain_id = core.chain_id().to_string();
         let events = self.runtime.block_on(core.get_activity())?;
         Ok(events
             .into_iter()
-            .map(|e| ActivityEventFFI {
-                event_type: e.event_type,
-                amount_sats: e.amount_sats,
-                tx_hash: e.tx_hash,
-                block_number: e.block_number,
+            .map(|e| {
+                let explorer_url = tx_explorer_url(&chain_id, &e.tx_hash);
+                ActivityEventFFI {
+                    event_type: e.event_type,
+                    amount_sats: e.amount_sats,
+                    tx_hash: e.tx_hash,
+                    block_number: e.block_number,
+                    timestamp_secs: e.timestamp_secs,
+                    status: e.status.as_str().to_string(),
+                    explorer_url,
+                }
             })
             .collect())
     }
 
     pub fn get_cached_activity(&self) -> Vec<ActivityEventFFI> {
         let core = self.core.lock().unwrap();
+        let chain_id = core.chain_id().to_string();
         core.get_cached_activity()
             .into_iter()
-            .map(|e| ActivityEventFFI {
-                event_type: e.event_type,
-                amount_sats: e.amount_sats,
-                tx_hash: e.tx_hash,
-                block_number: e.block_number,
+            .map(|e| {
+                let explorer_url = tx_explorer_url(&chain_id, &e.tx_hash);
+                ActivityEventFFI {
+                    event_type: e.event_type,
+                    amount_sats: e.amount_sats,
+                    tx_hash: e.tx_hash,
+                    block_number: e.block_number,
+                    timestamp_secs: e.timestamp_secs,
+                    status: e.status.as_str().to_string(),
+                    explorer_url,
+                }
             })
             .collect()
     }
@@ -633,7 +776,7 @@ impl OubliWallet {
     }
 
     pub fn swap_status(&self, swap_id: String) -> Result<SwapStatusFFI, OubliError> {
-        let core = self.core.lock().unwrap();
+        let mut core = self.core.lock().unwrap();
         let status = self
             .runtime
             .block_on(core.handle_swap_status(&swap_id))
@@ -646,7 +789,7 @@ impl OubliWallet {
     }
 
     pub fn swap_list(&self) -> Result<Vec<SwapSummaryFFI>, OubliError> {
-        let core = self.core.lock().unwrap();
+        let mut core = self.core.lock().unwrap();
         let swaps = self
             .runtime
             .block_on(core.handle_swap_list())
@@ -694,6 +837,70 @@ impl OubliWallet {
             .block_on(core.handle_pay_lightning(&bolt11))
             .map_err(OubliError::from)
     }
+
+    /// Calculate the fee in sats for a given amount.
+    /// Returns "0" if no fee is configured.
+    pub fn calculate_fee(&self, amount_sats: String) -> String {
+        let core = self.core.lock().unwrap();
+        let config = core.config();
+        if config.fee_collector_pubkey.is_none() || config.fee_percent <= 0.0 {
+            return "0".into();
+        }
+        let sats: u64 = amount_sats.trim().parse().unwrap_or(0);
+        let fee = oubli_wallet::calculate_fee_sats(sats, config.fee_percent);
+        fee.to_string()
+    }
+
+    /// Calculate the effective fee for `handle_send`, accounting for recipient routing.
+    pub fn calculate_send_fee(&self, amount_sats: String, recipient: String) -> String {
+        let core = self.core.lock().unwrap();
+        calculate_send_fee_for_recipient(&core, &amount_sats, &recipient)
+    }
+
+    /// Returns the configured fee percentage (e.g. 1.0 for 1%).
+    pub fn get_fee_percent(&self) -> f64 {
+        let core = self.core.lock().unwrap();
+        core.config().fee_percent
+    }
+
+    // ── Contacts ─────────────────────────────────────────────
+
+    pub fn get_contacts(&self) -> Vec<ContactFFI> {
+        let core = self.core.lock().unwrap();
+        oubli_wallet::contacts::get_contacts(core.storage())
+            .into_iter()
+            .map(ContactFFI::from)
+            .collect()
+    }
+
+    pub fn find_contact_by_address(&self, address: String) -> Option<ContactFFI> {
+        let core = self.core.lock().unwrap();
+        oubli_wallet::contacts::find_contact_by_address(core.storage(), &address)
+            .map(ContactFFI::from)
+    }
+
+    pub fn save_contact(&self, contact: ContactFFI) -> Result<String, OubliError> {
+        let core = self.core.lock().unwrap();
+        oubli_wallet::contacts::save_contact(core.storage(), contact.into())
+            .map_err(OubliError::from)
+    }
+
+    pub fn delete_contact(&self, contact_id: String) -> Result<(), OubliError> {
+        let core = self.core.lock().unwrap();
+        oubli_wallet::contacts::delete_contact(core.storage(), &contact_id)
+            .map_err(OubliError::from)
+    }
+
+    pub fn update_contact_last_used(&self, contact_id: String) -> Result<(), OubliError> {
+        let core = self.core.lock().unwrap();
+        oubli_wallet::contacts::update_contact_last_used(core.storage(), &contact_id)
+            .map_err(OubliError::from)
+    }
+
+    pub fn get_transfer_recipient(&self, tx_hash: String) -> Option<String> {
+        let core = self.core.lock().unwrap();
+        core.get_transfer_recipient(&tx_hash)
+    }
 }
 
 fn swap_quote_to_ffi(q: oubli_swap::types::SwapQuote) -> SwapQuoteFFI {
@@ -708,4 +915,187 @@ fn swap_quote_to_ffi(q: oubli_swap::types::SwapQuote) -> SwapQuoteFFI {
     }
 }
 
+fn calculate_send_fee_for_recipient(
+    core: &WalletCore,
+    amount_sats: &str,
+    recipient: &str,
+) -> String {
+    let config = core.config();
+    if config.fee_collector_pubkey.is_none() || config.fee_percent <= 0.0 {
+        return "0".into();
+    }
+
+    let trimmed = recipient.trim();
+    if trimmed.is_empty() {
+        return "0".into();
+    }
+    let stripped = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+
+    // `handle_send` routes long hex strings to private transfers. Lightning
+    // invoices also exceed the Starknet address length, so they remain free.
+    if stripped.len() > 64 {
+        return "0".into();
+    }
+
+    if let Some(address) = current_starknet_address(core) {
+        if normalize_hex_id(address) == normalize_hex_id(trimmed) {
+            return "0".into();
+        }
+    }
+
+    let sats: u64 = amount_sats.trim().parse().unwrap_or(0);
+    oubli_wallet::calculate_fee_sats(sats, config.fee_percent).to_string()
+}
+
+fn current_starknet_address(core: &WalletCore) -> Option<&str> {
+    match core.state() {
+        WalletState::Ready { address, .. } | WalletState::Processing { address, .. } => {
+            Some(address.as_str())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_hex_id(value: &str) -> String {
+    let trimmed = value.trim();
+    let stripped = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+    let without_leading_zeros = stripped.trim_start_matches('0');
+    if without_leading_zeros.is_empty() {
+        "0".into()
+    } else {
+        without_leading_zeros.to_ascii_lowercase()
+    }
+}
+
+// ── BTC price helper ─────────────────────────────────────────
+
+/// Fetch BTC price in the given fiat currency from CoinGecko on a dedicated thread.
+fn fetch_btc_price_blocking(currency: &str) -> Option<f64> {
+    let currency = currency.to_lowercase();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let client = match reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .user_agent("Oubli-Wallet/0.1")
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[oubli] btc price: client build error: {e}");
+                let _ = tx.send(None);
+                return;
+            }
+        };
+        let url = format!(
+            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={}",
+            currency
+        );
+        let resp = match client.get(&url).send() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[oubli] btc price: request error: {e}");
+                let _ = tx.send(None);
+                return;
+            }
+        };
+        let json: serde_json::Value = match resp.json() {
+            Ok(j) => j,
+            Err(e) => {
+                eprintln!("[oubli] btc price: json parse error: {e}");
+                let _ = tx.send(None);
+                return;
+            }
+        };
+        let price = json
+            .get("bitcoin")
+            .and_then(|b| b.get(&currency))
+            .and_then(|u| u.as_f64());
+        let _ = tx.send(price);
+    });
+    rx.recv_timeout(Duration::from_secs(15)).ok().flatten()
+}
+
 uniffi::include_scaffolding!("oubli");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse a CoinGecko-style JSON response and extract the BTC/USD price.
+    fn parse_btc_price(json: &serde_json::Value) -> Option<f64> {
+        json.get("bitcoin")?.get("usd")?.as_f64()
+    }
+
+    #[test]
+    fn test_parse_btc_price_valid_response() {
+        let json: serde_json::Value = serde_json::json!({"bitcoin": {"usd": 70499.0}});
+        let price = parse_btc_price(&json);
+        assert_eq!(price, Some(70499.0));
+    }
+
+    #[test]
+    fn test_parse_btc_price_missing_bitcoin_key() {
+        let json: serde_json::Value = serde_json::json!({"ethereum": {"usd": 3500.0}});
+        assert_eq!(parse_btc_price(&json), None);
+    }
+
+    #[test]
+    fn test_parse_btc_price_missing_usd_key() {
+        let json: serde_json::Value = serde_json::json!({"bitcoin": {"eur": 65000.0}});
+        assert_eq!(parse_btc_price(&json), None);
+    }
+
+    #[test]
+    fn test_parse_btc_price_error_response() {
+        let json: serde_json::Value = serde_json::json!({
+            "status": {"error_code": 429, "error_message": "Rate limited"}
+        });
+        assert_eq!(parse_btc_price(&json), None);
+    }
+
+    #[test]
+    fn test_btc_price_cache_hit() {
+        let cache: Mutex<Option<(f64, std::time::Instant)>> = Mutex::new(None);
+
+        // Empty cache
+        assert!(cache.lock().unwrap().is_none());
+
+        // Store a price
+        let price = 70000.0;
+        *cache.lock().unwrap() = Some((price, std::time::Instant::now()));
+
+        // Cache hit within 1 hour
+        let cached = cache.lock().unwrap();
+        let (cached_price, fetched_at) = cached.as_ref().unwrap();
+        assert_eq!(*cached_price, price);
+        assert!(fetched_at.elapsed() < Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn test_btc_price_cache_expired() {
+        let cache: Mutex<Option<(f64, std::time::Instant)>> = Mutex::new(None);
+
+        // Store a price with a timestamp 2 hours in the past
+        let old_time = std::time::Instant::now() - Duration::from_secs(7200);
+        *cache.lock().unwrap() = Some((60000.0, old_time));
+
+        // Cache should be considered expired
+        let cached = cache.lock().unwrap();
+        let (_, fetched_at) = cached.as_ref().unwrap();
+        assert!(fetched_at.elapsed() >= Duration::from_secs(3600));
+    }
+
+    #[test]
+    #[ignore] // Hits external API — run with --ignored
+    fn test_fetch_btc_price_live() {
+        let price = fetch_btc_price_blocking("usd");
+        assert!(price.is_some(), "CoinGecko should return a BTC price");
+        let price = price.unwrap();
+        assert!(price > 1_000.0, "BTC price should be > $1,000, got {price}");
+        assert!(
+            price < 10_000_000.0,
+            "BTC price should be < $10M, got {price}"
+        );
+        assert!(price.is_finite(), "Price should be finite");
+    }
+}

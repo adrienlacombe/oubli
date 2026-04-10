@@ -54,13 +54,11 @@ impl AuthState {
                 self.transition_to(AuthTier::T2Transact)
             }
             // Timeout/background drops tier
-            (_, AuthAction::Timeout) | (_, AuthAction::Background) => {
-                match self.tier {
-                    AuthTier::T3Critical => self.transition_to(AuthTier::T2Transact),
-                    AuthTier::T2Transact => self.transition_to(AuthTier::T0Locked),
-                    AuthTier::T0Locked => AuthTransitionResult::TierChanged(AuthTier::T0Locked),
-                }
-            }
+            (_, AuthAction::Timeout) | (_, AuthAction::Background) => match self.tier {
+                AuthTier::T3Critical => self.transition_to(AuthTier::T2Transact),
+                AuthTier::T2Transact => self.transition_to(AuthTier::T0Locked),
+                AuthTier::T0Locked => AuthTransitionResult::TierChanged(AuthTier::T0Locked),
+            },
             // Lock always returns to T0
             (_, AuthAction::Lock) => self.transition_to(AuthTier::T0Locked),
             // Anything else is denied
@@ -80,18 +78,15 @@ impl AuthState {
 
     /// Remaining time before the current tier expires (if any).
     pub fn remaining(&self) -> Option<Duration> {
-        self.tier_expiry.and_then(|e| e.checked_duration_since(Instant::now()))
+        self.tier_expiry
+            .and_then(|e| e.checked_duration_since(Instant::now()))
     }
 
     fn transition_to(&mut self, tier: AuthTier) -> AuthTransitionResult {
         self.tier = tier;
         self.tier_expiry = match tier {
-            AuthTier::T2Transact => {
-                Some(Instant::now() + self.session_config.t2_timeout)
-            }
-            AuthTier::T3Critical => {
-                Some(Instant::now() + self.session_config.t2_timeout)
-            }
+            AuthTier::T2Transact => Some(Instant::now() + self.session_config.t2_timeout),
+            AuthTier::T3Critical => Some(Instant::now() + self.session_config.t2_timeout),
             AuthTier::T0Locked => {
                 self.tier_expiry = None;
                 None
@@ -113,14 +108,20 @@ mod tests {
     fn biometric_goes_straight_to_t2() {
         let mut s = state();
         assert_eq!(s.tier, AuthTier::T0Locked);
-        assert_eq!(s.apply(AuthAction::BiometricSuccess), AuthTransitionResult::TierChanged(AuthTier::T2Transact));
+        assert_eq!(
+            s.apply(AuthAction::BiometricSuccess),
+            AuthTransitionResult::TierChanged(AuthTier::T2Transact)
+        );
     }
 
     #[test]
     fn lock_resets_to_t0() {
         let mut s = state();
         s.apply(AuthAction::BiometricSuccess);
-        assert_eq!(s.apply(AuthAction::Lock), AuthTransitionResult::TierChanged(AuthTier::T0Locked));
+        assert_eq!(
+            s.apply(AuthAction::Lock),
+            AuthTransitionResult::TierChanged(AuthTier::T0Locked)
+        );
     }
 
     #[test]
@@ -128,14 +129,20 @@ mod tests {
         let mut s = state();
         s.apply(AuthAction::BiometricSuccess);
         assert_eq!(s.tier, AuthTier::T2Transact);
-        assert_eq!(s.apply(AuthAction::Timeout), AuthTransitionResult::TierChanged(AuthTier::T0Locked));
+        assert_eq!(
+            s.apply(AuthAction::Timeout),
+            AuthTransitionResult::TierChanged(AuthTier::T0Locked)
+        );
     }
 
     #[test]
     fn background_drops_to_locked() {
         let mut s = state();
         s.apply(AuthAction::BiometricSuccess);
-        assert_eq!(s.apply(AuthAction::Background), AuthTransitionResult::TierChanged(AuthTier::T0Locked));
+        assert_eq!(
+            s.apply(AuthAction::Background),
+            AuthTransitionResult::TierChanged(AuthTier::T0Locked)
+        );
     }
 
     #[test]
@@ -143,6 +150,9 @@ mod tests {
         let mut s = state();
         // Duplicate biometric at T2 is denied
         s.apply(AuthAction::BiometricSuccess);
-        assert_eq!(s.apply(AuthAction::BiometricSuccess), AuthTransitionResult::Denied);
+        assert_eq!(
+            s.apply(AuthAction::BiometricSuccess),
+            AuthTransitionResult::Denied
+        );
     }
 }

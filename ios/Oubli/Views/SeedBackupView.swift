@@ -23,6 +23,7 @@ struct SeedBackupView: View {
                 switch phase {
                 case .loading:
                     ProgressView("Preparing backup...")
+                        .accessibilityLabel("Preparing seed backup")
                         .onAppear { loadBackup() }
 
                 case .displayWords(let state):
@@ -50,10 +51,11 @@ struct SeedBackupView: View {
             VStack(spacing: 24) {
                 Text("Word Group \(currentGroupIndex + 1) of \(state.wordGroups.count)")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("Write down these words carefully in order.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.oubliOnSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
 
@@ -68,7 +70,7 @@ struct SeedBackupView: View {
                         HStack(spacing: 4) {
                             Text("\(offset + index + 1).")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.oubliOnSurfaceVariant)
                                 .frame(width: 28, alignment: .trailing)
                             Text(word)
                                 .font(.body.monospaced())
@@ -76,8 +78,10 @@ struct SeedBackupView: View {
                         }
                         .padding(.vertical, 10)
                         .padding(.horizontal, 12)
-                        .background(Color(.systemGray6))
+                        .background(Color.oubliSurfaceContainerHigh)
                         .cornerRadius(8)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Word \(offset + index + 1): \(word)")
                     }
                 }
                 .padding(.horizontal, 24)
@@ -107,10 +111,11 @@ struct SeedBackupView: View {
             Text("Verify Word #\(prompt.wordNumber)")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Enter word number \(prompt.wordNumber) from your seed phrase.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -119,27 +124,37 @@ struct SeedBackupView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .padding()
-                .background(Color(.systemGray6))
+                .background(Color.oubliSurfaceContainerHigh)
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.oubliOutline.opacity(0.5), lineWidth: 2)
+                )
                 .padding(.horizontal, 40)
+                .accessibilityLabel("Enter word number \(prompt.wordNumber)")
 
             if wrongAnswer {
-                Text("Incorrect. Please check your written words and try again.")
-                    .font(.footnote)
-                    .foregroundColor(.red)
-                    .padding(.horizontal, 32)
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(Color.oubliError)
+                        .accessibilityHidden(true)
+                    Text("Incorrect. Please check your written words and try again.")
+                        .font(.footnote)
+                        .foregroundColor(Color.oubliError)
+                }
+                .padding(.horizontal, 32)
             }
 
             Spacer()
 
             Text("Prompt \(promptIndex + 1) of \(state.prompts.count)")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
 
             Button {
                 checkAnswer(state: state, promptIndex: promptIndex)
             } label: {
-                Text("Check")
+                Label("Check", systemImage: "checkmark")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -158,21 +173,24 @@ struct SeedBackupView: View {
 
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.oubliReceived)
+                .accessibilityHidden(true)
 
             Text("Backup Verified")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Your seed phrase has been verified successfully. Keep it stored safely offline.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
             Spacer()
 
             Button {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 viewModel.dismissError() // refreshes state, returning to wallet
             } label: {
                 Text("Done")
@@ -193,15 +211,17 @@ struct SeedBackupView: View {
 
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.oubliError)
+                .accessibilityHidden(true)
 
             Text("Backup Failed")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Could not initialize the seed backup flow. Please try again.")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -271,6 +291,7 @@ struct SeedBackupView: View {
             }
         } else {
             wrongAnswer = true
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
 

@@ -105,20 +105,17 @@ impl PaymasterClient {
                 .unwrap_or("unknown");
             let data = error.get("data").map(|d| d.to_string());
             let err_msg = match data {
-                Some(d) if !d.is_empty() && d != "null" => format!(
-                    "{method} JSON-RPC error: code={code}, message=\"{message}\", data={d}"
-                ),
-                _ => format!(
-                    "{method} JSON-RPC error: code={code}, message=\"{message}\""
-                ),
+                Some(d) if !d.is_empty() && d != "null" => {
+                    format!("{method} JSON-RPC error: code={code}, message=\"{message}\", data={d}")
+                }
+                _ => format!("{method} JSON-RPC error: code={code}, message=\"{message}\""),
             };
             return Err(WalletError::Paymaster(err_msg));
         }
 
-        rpc_resp
-            .get("result")
-            .cloned()
-            .ok_or_else(|| WalletError::Paymaster(format!("{method}: missing 'result' in response")))
+        rpc_resp.get("result").cloned().ok_or_else(|| {
+            WalletError::Paymaster(format!("{method}: missing 'result' in response"))
+        })
     }
 
     // ── Build ──────────────────────────────────────────────────
@@ -283,9 +280,7 @@ impl PaymasterClient {
             .await?;
 
         let typed_data = result.get("typed_data").cloned().ok_or_else(|| {
-            WalletError::Paymaster(
-                "buildTransaction(deploy_and_invoke): missing typed_data".into(),
-            )
+            WalletError::Paymaster("buildTransaction(deploy_and_invoke): missing typed_data".into())
         })?;
 
         Ok(BuildInvokeResponse { typed_data })

@@ -14,22 +14,19 @@
 ### Unit tests (no network)
 
 ```sh
-cargo test --workspace
+make test-offline
 ```
 
 ### Mock-only integration tests
 
 ```sh
-cargo test -p oubli-wallet --test integration test_full_lifecycle_mock
-cargo test -p oubli-wallet --test integration test_fund_requires_t2
+make test-smoke
 ```
 
 ### Sepolia tests
 
 ```sh
-set -a && . crates/oubli-wallet/tests/sepolia.env && set +a
-cargo test -p oubli-wallet --test integration -- --ignored --nocapture
-cargo test -p oubli-wallet --test sepolia_full_flow -- --ignored --nocapture
+make OUBLI_ENV_FILE=.sepolia.env test-sepolia
 ```
 
 ### Mainnet tests
@@ -37,8 +34,7 @@ cargo test -p oubli-wallet --test sepolia_full_flow -- --ignored --nocapture
 **WARNING: Uses real WBTC.**
 
 ```sh
-set -a && . crates/oubli-wallet/tests/mainnet.env && set +a
-cargo test -p oubli-wallet --test mainnet_full_flow -- --ignored --nocapture
+make OUBLI_ENV_FILE=.mainnet.env OUBLI_ALLOW_MAINNET=1 test-mainnet
 ```
 
 ### Devnet tests
@@ -57,13 +53,14 @@ make test-devnet
 
 ## Environment setup
 
-Each network has an `.env` file that must be sourced before running tests:
+Source **one** env file before building or running tests:
 
-| File | Network | Token |
-|------|---------|-------|
-| `sepolia.env` | Sepolia testnet | STRK |
-| `mainnet.env` | Starknet mainnet | WBTC |
-| `sepolia.env.example` | Template | — |
+| File | When to use |
+|------|-------------|
+| `.mainnet.env` | Explicit mainnet validation only |
+| `.sepolia.env` | Default local dev and Sepolia integration tests |
+
+Never source both at the same time. Test env files under `crates/oubli-wallet/tests/` are symlinks to the root files.
 
 Required env vars:
 
@@ -71,7 +68,7 @@ Required env vars:
 - `OUBLI_CHAIN_ID` — `SN_SEPOLIA` or `SN_MAIN`
 - `OUBLI_TONGO_CONTRACT` — Tongo privacy pool contract address
 - `OUBLI_TOKEN_CONTRACT` — Underlying ERC-20 (STRK on Sepolia, WBTC on mainnet)
-- `OUBLI_ACCOUNT_CLASS_HASH` — OZ account class hash (v0.4.0)
+- `OUBLI_ACCOUNT_CLASS_HASH` — Starknet account class hash used for counterfactual address derivation and paymaster deploys (ArgentX v0.4 on Sepolia/mainnet)
 - `OUBLI_PAYMASTER_URL` — AVNU paymaster endpoint
 - `OUBLI_AVNU_PAYMASTER_API_KEY` — AVNU API key
 - `OUBLI_TEST_MNEMONIC_A` — Faucet mnemonic (pre-funded, distributes tokens to test wallets)
@@ -81,19 +78,19 @@ Required env vars:
 All Sepolia and mainnet tests follow the same pattern:
 
 1. **Generate fresh mnemonics** at runtime (no hardcoded test accounts)
-2. **Faucet (S0)** distributes tokens from `OUBLI_TEST_MNEMONIC_A` via raw ERC-20 transfers
+2. **Faucet (S0)** distributes tokens from `OUBLI_TEST_MNEMONIC_A` via paymaster-sponsored ERC-20 transfers
 3. Tests exercise wallet operations (fund, transfer, rollover, withdraw, ragequit)
 4. **Cleanup** recovers tokens back to the faucet via ragequit + send_token
 
 Mainnet tests print recovery mnemonics at the start so funds can be manually recovered if the test fails mid-run. Use `test_recover_strk_mainnet` with `OUBLI_RECOVER_MNEMONICS` (semicolon-separated) to automate recovery.
 
-## Faucet architecture (SingleOwnerAccount vs WalletCore)
+## Faucet architecture (PaymasterSubmitter vs WalletCore)
 
 The faucet account (`OUBLI_TEST_MNEMONIC_A`) holds public ERC-20 tokens (STRK on Sepolia, WBTC on mainnet) and distributes them to test wallets. It is intentionally used in two different ways:
 
-### `faucet_strk()` — Raw ERC-20 transfers (safe)
+### `faucet_strk()` — Sponsored ERC-20 transfers (safe)
 
-The `faucet_strk()` helper uses `SingleOwnerAccount` from starknet-rs directly. This is a plain Starknet account that signs and submits ERC-20 `transfer()` calls. **No WalletCore, no auto-fund, no Tongo involvement.** The faucet's public token balance is preserved.
+The `faucet_strk()` helper derives the faucet account directly from the mnemonic and submits ERC-20 `transfer()` calls through `PaymasterSubmitter`. **No WalletCore, no auto-fund, no Tongo balance changes.** The faucet's public token balance is preserved and the paymaster handles deployment + gas sponsorship when needed.
 
 This is the correct way to interact with the faucet during tests.
 
@@ -102,13 +99,12 @@ This is the correct way to interact with the faucet during tests.
 `WalletCore` is the full Oubli wallet with auto-fund, auto-rollover, and Tongo privacy pool integration. When `handle_refresh_balance()` runs and detects a public token balance, it **automatically sweeps everything into the Tongo pool** (auto-fund).
 
 **Do NOT create a `WalletCore` from the faucet mnemonic** unless:
-- Deploying the faucet account for the first time (`ensure_faucet_deployed`)
 - Running the recovery test (`test_recover_strk_mainnet`) to ragequit funds back
 
 If auto-fund accidentally sweeps the faucet's tokens into Tongo, use the recovery test to ragequit them back to the public balance:
 
 ```sh
-set -a && . crates/oubli-wallet/tests/mainnet.env && set +a
+set -a && source .mainnet.env && set +a
 OUBLI_RECOVER_MNEMONICS="$OUBLI_TEST_MNEMONIC_A" \
   cargo test -p oubli-wallet --test mainnet_full_flow test_recover_strk_mainnet -- --ignored --nocapture
 ```
@@ -124,7 +120,7 @@ The AVNU paymaster intermittently rejects transactions with `"execution call was
 - **Never call `handle_refresh_balance()` before `handle_fund()`** — auto-fund sweeps public tokens, causing `u256_sub Overflow` when the explicit fund tries to use them. `handle_fund()` uses `sync_balance_for_proof()` internally (no auto-fund).
 - **Ragequit to faucet, not self** — ragequit to the wallet's own address causes an infinite cycle: ragequit sends tokens to self → auto-fund immediately re-sweeps them into Tongo.
 - **Use auto-rollover, not manual `handle_rollover_op()`** — `handle_refresh_balance()` triggers auto-rollover when pending > 0. Calling manual rollover after a refresh races with auto-rollover and causes "Proof Of Ownership failed".
-- **Source both `.env` and network env** — `.env` provides compile-time RPC URLs; `sepolia.env`/`mainnet.env` provides runtime test config. Use `bash -c 'set -a && source .env && source <network>.env && set +a && cargo test ...'`.
+- **Source the right env file** — `set -a && source .mainnet.env && set +a` for mainnet, or `.sepolia.env` for Sepolia. Never source both.
 
 ## Devnet architecture
 

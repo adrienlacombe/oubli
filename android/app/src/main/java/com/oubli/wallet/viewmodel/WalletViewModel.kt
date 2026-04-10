@@ -1,116 +1,129 @@
 package com.oubli.wallet.viewmodel
 
-import android.app.Application
-import android.content.Context
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.oubli.wallet.platform.KeystoreStorage
+import com.oubli.wallet.data.WalletRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import uniffi.oubli.ActivityEventFfi
+import uniffi.oubli.ContactFfi
 import uniffi.oubli.OubliException
-import uniffi.oubli.OubliWallet
-import uniffi.oubli.SeedBackupStateFfi
 import uniffi.oubli.WalletStateFfi
-import uniffi.oubli.WalletStateInfo
-import java.lang.ref.WeakReference
+import javax.inject.Inject
 
-class WalletViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class WalletViewModel @Inject constructor(
+    private val repository: WalletRepository,
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(
-        WalletStateInfo(
-            state = WalletStateFfi.ONBOARDING,
-            address = null,
-            publicKey = null,
-            balanceSats = null,
-            pendingSats = null,
-            operation = null,
-            errorMessage = null,
-            autoFundError = null,
-        )
-    )
-    val uiState: StateFlow<WalletStateInfo> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(WalletUiState())
+    val uiState: StateFlow<WalletUiState> = _uiState.asStateFlow()
 
-    private val _isBalanceHidden = MutableStateFlow(false)
-    val isBalanceHidden: StateFlow<Boolean> = _isBalanceHidden.asStateFlow()
-
-    private val _showUsd = MutableStateFlow(false)
-    val showUsd: StateFlow<Boolean> = _showUsd.asStateFlow()
-
-    private val _btcPriceUsd = MutableStateFlow<Double?>(null)
-    val btcPriceUsd: StateFlow<Double?> = _btcPriceUsd.asStateFlow()
-
-    private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
-
-    private val _seedBackupState = MutableStateFlow<SeedBackupStateFfi?>(null)
-    val seedBackupState: StateFlow<SeedBackupStateFfi?> = _seedBackupState.asStateFlow()
-
-    private val _activity = MutableStateFlow<List<ActivityEventFfi>>(emptyList())
-    val activity: StateFlow<List<ActivityEventFfi>> = _activity.asStateFlow()
-
-    private val _errorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
-
-    private val _successEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val successEvents: SharedFlow<String> = _successEvents.asSharedFlow()
-
+    /** Dialog-scoped flow for lightning operation progress messages. */
     private val _lightningOperation = MutableStateFlow<String?>(null)
     val lightningOperation: StateFlow<String?> = _lightningOperation.asStateFlow()
 
-    private val _biometricUnlockError = MutableStateFlow<String?>(null)
-    val biometricUnlockError: StateFlow<String?> = _biometricUnlockError.asStateFlow()
+    private var activityPollingJob: Job? = null
 
-    private var wallet: OubliWallet? = null
-    private var activityPollingJob: kotlinx.coroutines.Job? = null
+    // ---- Initialization ----
 
     fun attach(activity: FragmentActivity) {
-        if (wallet != null) return
+        if (repository.isInitialized) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val storage = KeystoreStorage(
-                    context = getApplication(),
-                    activityRef = WeakReference(activity),
-                )
-                wallet = OubliWallet(storage)
-                val savedUrl = getApplication<Application>()
-                    .getSharedPreferences("oubli_debug", Context.MODE_PRIVATE)
-                    .getString("rpc_url", null)
-                if (savedUrl != null) wallet?.updateRpcUrl(savedUrl)
+                repository.initialize(activity)
                 refreshState()
             } catch (e: OubliException) {
-                _errorEvents.tryEmit("Failed to initialize wallet: ${e.message}")
+                emitError("Failed to initialize wallet: ${e.message}")
             }
         }
     }
 
-    private fun refreshState() {
-        val w = wallet ?: return
-        val state = w.getState()
-        _uiState.value = state
-        updateActivityPolling()
+    // ---- State refresh ----
+
+    private suspend fun refreshState() {
+        try {
+            val state = repository.getState()
+            val newScreen = mapFfiStateToScreen(state)
+            _uiState.update { it.copy(screenState = newScreen) }
+            updateActivityPolling(state.state)
+        } catch (e: Exception) {
+            emitError("Failed to refresh state: ${e.message}")
+        }
     }
 
-    private fun updateActivityPolling() {
-        val shouldPoll = _uiState.value.state == WalletStateFfi.READY ||
-                _uiState.value.state == WalletStateFfi.PROCESSING
+    private fun mapFfiStateToScreen(state: uniffi.oubli.WalletStateInfo): ScreenState {
+        return when (state.state) {
+            WalletStateFfi.ONBOARDING -> ScreenState.Onboarding
+            WalletStateFfi.LOCKED -> ScreenState.Locked()
+            WalletStateFfi.READY -> {
+                val current = _uiState.value.screenState
+                ScreenState.Ready(
+                    address = state.address.orEmpty(),
+                    publicKey = state.publicKey.orEmpty(),
+                    balanceSats = state.balanceSats ?: "0",
+                    pendingSats = state.pendingSats ?: "0",
+                    isBalanceHidden = (current as? ScreenState.Ready)?.isBalanceHidden ?: false,
+                    showFiat = (current as? ScreenState.Ready)?.showFiat ?: false,
+                    fiatCurrency = (current as? ScreenState.Ready)?.fiatCurrency ?: getFiatCurrency(),
+                    btcFiatPrice = (current as? ScreenState.Ready)?.btcFiatPrice,
+                    activity = (current as? ScreenState.Ready)?.activity ?: emptyList(),
+                    isRefreshing = false,
+                    autoFundError = state.autoFundError,
+                )
+            }
+            WalletStateFfi.PROCESSING -> ScreenState.Processing(
+                address = state.address.orEmpty(),
+                operation = state.operation ?: "Processing...",
+            )
+            WalletStateFfi.ERROR -> ScreenState.Error(
+                message = state.errorMessage ?: "An unknown error occurred.",
+            )
+            WalletStateFfi.SEED_BACKUP -> {
+                // Seed backup state is set separately via startSeedBackup
+                val current = _uiState.value.screenState
+                if (current is ScreenState.SeedBackup) current
+                else ScreenState.Loading
+            }
+            WalletStateFfi.WIPED -> ScreenState.Wiped
+        }
+    }
+
+    private fun updateActivityPolling(walletState: WalletStateFfi) {
+        val shouldPoll = walletState == WalletStateFfi.READY || walletState == WalletStateFfi.PROCESSING
         if (shouldPoll && activityPollingJob == null) {
             refreshBtcPrice()
+            loadContacts()
             activityPollingJob = viewModelScope.launch(Dispatchers.IO) {
                 while (true) {
                     delay(2000)
-                    runCatching { wallet?.getActivity() }
-                        .onSuccess { events ->
-                            if (events != null) _activity.value = events
+                    try {
+                        val state = repository.getState()
+                        val events = try {
+                            repository.getActivity()
+                        } catch (_: Exception) {
+                            repository.getCachedActivity()
                         }
+                        val newScreen = mapFfiStateToScreen(state)
+                        val contacts = (_uiState.value.screenState as? ScreenState.Ready)?.contacts ?: emptyList()
+                        val nameMap = buildContactNameMap(events, contacts)
+                        _uiState.update { current ->
+                            if (newScreen is ScreenState.Ready) {
+                                current.copy(screenState = newScreen.copy(activity = events, activityContactNames = nameMap))
+                            } else {
+                                current.copy(screenState = newScreen)
+                            }
+                        }
+                    } catch (_: Exception) {
+                        // Polling failure is non-fatal
+                    }
                 }
             }
         } else if (!shouldPoll && activityPollingJob != null) {
@@ -123,20 +136,19 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun generateMnemonic(onResult: (String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.generateMnemonic() }
-                .onSuccess { mnemonic ->
-                    if (mnemonic != null) {
-                        launch(Dispatchers.Main) { onResult(mnemonic) }
-                    }
-                }
-                .onFailure { emitError(it) }
+            try {
+                val mnemonic = repository.generateMnemonic()
+                launch(Dispatchers.Main) { onResult(mnemonic) }
+            } catch (e: Exception) {
+                emitError(e)
+            }
         }
     }
 
     fun validateMnemonic(phrase: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val valid = try {
-                wallet?.validateMnemonic(phrase)
+                repository.validateMnemonic(phrase)
                 true
             } catch (_: OubliException) {
                 false
@@ -147,89 +159,207 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun completeOnboarding(mnemonic: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.handleCompleteOnboarding(mnemonic) }
-                .onSuccess {
-                    refreshState()
-                    loadActivity()
-                }
-                .onFailure { emitError(it) }
+            try {
+                repository.completeOnboarding(mnemonic)
+                refreshState()
+                loadActivity()
+            } catch (e: Exception) {
+                emitError(e)
+            }
         }
     }
 
     // ---- Unlock ----
 
     fun unlockBiometric() {
-        val currentWallet = wallet
-        if (currentWallet == null) {
-            _biometricUnlockError.value = "Wallet is unavailable. Restart the app and try again."
+        if (!repository.isInitialized) {
+            _uiState.update { current ->
+                val screen = current.screenState
+                if (screen is ScreenState.Locked) {
+                    current.copy(screenState = screen.copy(unlockError = "Wallet is unavailable. Restart the app and try again."))
+                } else {
+                    current
+                }
+            }
             return
         }
-        _biometricUnlockError.value = null
+
+        _uiState.update { current ->
+            val screen = current.screenState
+            if (screen is ScreenState.Locked) {
+                current.copy(screenState = screen.copy(unlockError = null))
+            } else {
+                current
+            }
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { currentWallet.handleUnlockBiometric() }
-                .onSuccess {
-                    _biometricUnlockError.value = null
-                    refreshState()
-                    // Load cached activity immediately for instant display
-                    currentWallet.getCachedActivity().let { _activity.value = it }
-                    // Then fetch fresh activity from network
-                    loadActivity()
+            try {
+                repository.unlockBiometric()
+                refreshState()
+                // Load cached activity immediately for instant display
+                val cachedEvents = repository.getCachedActivity()
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Ready) {
+                        current.copy(screenState = screen.copy(activity = cachedEvents))
+                    } else {
+                        current
+                    }
                 }
-                .onFailure { _biometricUnlockError.value = biometricUnlockErrorMessage(it) }
+                // Then fetch fresh activity from network
+                loadActivity()
+            } catch (e: Exception) {
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Locked) {
+                        current.copy(screenState = screen.copy(unlockError = biometricUnlockErrorMessage(e)))
+                    } else {
+                        current
+                    }
+                }
+            }
         }
     }
 
     // ---- Balance Privacy ----
 
     fun toggleBalanceHidden() {
-        _isBalanceHidden.value = !_isBalanceHidden.value
+        _uiState.update { current ->
+            val screen = current.screenState
+            if (screen is ScreenState.Ready) {
+                current.copy(screenState = screen.copy(isBalanceHidden = !screen.isBalanceHidden))
+            } else {
+                current
+            }
+        }
     }
 
     fun toggleCurrency() {
-        _showUsd.value = !_showUsd.value
-        if (_showUsd.value && _btcPriceUsd.value == null) {
-            refreshBtcPrice()
+        _uiState.update { current ->
+            val screen = current.screenState
+            if (screen is ScreenState.Ready) {
+                val newShowFiat = !screen.showFiat
+                if (newShowFiat && screen.btcFiatPrice == null) {
+                    refreshBtcPrice()
+                }
+                current.copy(screenState = screen.copy(showFiat = newShowFiat))
+            } else {
+                current
+            }
         }
     }
 
     fun refreshBtcPrice() {
+        val currency = getFiatCurrency()
         viewModelScope.launch(Dispatchers.IO) {
-            val price = wallet?.getBtcPriceUsd()
-            if (price != null) _btcPriceUsd.value = price
+            val price = repository.getBtcPrice(currency)
+            if (price != null) {
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Ready) {
+                        current.copy(screenState = screen.copy(btcFiatPrice = price))
+                    } else {
+                        current
+                    }
+                }
+            }
         }
     }
 
-    fun satsToUsd(sats: String): String? {
-        val price = _btcPriceUsd.value ?: return null
+    fun setFiatCurrency(code: String) {
+        val lower = code.lowercase()
+        repository.saveFiatCurrency(lower)
+        _uiState.update { current ->
+            val screen = current.screenState
+            if (screen is ScreenState.Ready) {
+                current.copy(screenState = screen.copy(fiatCurrency = lower, btcFiatPrice = null))
+            } else {
+                current
+            }
+        }
+        refreshBtcPrice()
+    }
+
+    private fun getFiatCurrency(): String {
+        val screen = _uiState.value.screenState
+        return (screen as? ScreenState.Ready)?.fiatCurrency ?: repository.getSavedFiatCurrency()
+    }
+
+    fun satsToFiat(sats: String): String? {
+        val screen = _uiState.value.screenState as? ScreenState.Ready ?: return null
+        val price = screen.btcFiatPrice ?: return null
         val satsVal = sats.toDoubleOrNull() ?: return null
-        val usd = satsVal * price / 100_000_000.0
-        return if (usd < 0.01) String.format("$%.4f", usd)
-        else String.format("$%.2f", usd)
+        val fiat = satsVal * price / 100_000_000.0
+        val symbol = fiatSymbol(screen.fiatCurrency)
+        return if (fiat < 0.01) String.format("${symbol}%.4f", fiat)
+        else String.format("${symbol}%.2f", fiat)
+    }
+
+    /** Raw numeric fiat value (no symbol) for a given sats amount. */
+    fun satsToFiatRaw(sats: String): String? {
+        val screen = _uiState.value.screenState as? ScreenState.Ready ?: return null
+        val price = screen.btcFiatPrice ?: return null
+        val satsVal = sats.toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+        val fiat = satsVal * price / 100_000_000.0
+        return if (fiat < 0.01) String.format("%.4f", fiat)
+        else String.format("%.2f", fiat)
+    }
+
+    /** Convert a fiat amount string to sats (rounded to nearest integer). */
+    fun fiatToSats(fiat: String): String? {
+        val screen = _uiState.value.screenState as? ScreenState.Ready ?: return null
+        val price = screen.btcFiatPrice?.takeIf { it > 0 } ?: return null
+        val fiatVal = fiat.toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+        val sats = fiatVal / price * 100_000_000.0
+        return sats.toLong().toString()
+    }
+
+    companion object {
+        val supportedFiatCurrencies = listOf(
+            "usd" to "US Dollar", "eur" to "Euro", "gbp" to "British Pound",
+            "jpy" to "Japanese Yen", "cad" to "Canadian Dollar", "aud" to "Australian Dollar",
+            "chf" to "Swiss Franc", "cny" to "Chinese Yuan", "inr" to "Indian Rupee",
+            "brl" to "Brazilian Real", "krw" to "Korean Won", "mxn" to "Mexican Peso",
+            "try" to "Turkish Lira", "sek" to "Swedish Krona", "nok" to "Norwegian Krone",
+            "dkk" to "Danish Krone", "pln" to "Polish Zloty", "zar" to "South African Rand",
+            "thb" to "Thai Baht", "sgd" to "Singapore Dollar", "hkd" to "Hong Kong Dollar",
+            "nzd" to "New Zealand Dollar",
+        )
+
+        fun fiatSymbol(code: String): String = when (code.lowercase()) {
+            "usd", "cad", "aud", "nzd", "sgd", "hkd", "mxn" -> "$"
+            "eur" -> "€"
+            "gbp" -> "£"
+            "jpy", "cny" -> "¥"
+            "inr" -> "₹"
+            "brl" -> "R$"
+            "krw" -> "₩"
+            "try" -> "₺"
+            "sek", "nok", "dkk" -> "kr "
+            "pln" -> "zł "
+            "zar" -> "R "
+            "thb" -> "฿"
+            "chf" -> "CHF "
+            else -> "${code.uppercase()} "
+        }
+    }
+
+    fun calculateSendFee(amountSats: String, recipient: String): String {
+        return repository.calculateSendFee(amountSats, recipient)
     }
 
     // ---- Operations ----
 
     fun send(amountSats: String, recipient: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching<String?> { wallet?.handleSend(amountSats, recipient) }
-                .onSuccess { txHash ->
-                    refreshState()
-                    _successEvents.tryEmit("Sent: ${txHash?.take(16)}...")
-                }
-                .onFailure { emitError(it) }
-        }
-    }
-
-    fun payLightning(bolt11: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching<String?> { wallet?.payLightning(bolt11) }
-                .onSuccess { result ->
-                    refreshState()
-                    loadActivity()
-                    _successEvents.tryEmit("Lightning payment sent")
-                }
-                .onFailure { emitError(it) }
+            try {
+                val txHash = repository.send(amountSats, recipient)
+                refreshState()
+                emitSuccess("Sent: ${txHash?.take(16)}...")
+            } catch (e: Exception) {
+                emitError(e)
+            }
         }
     }
 
@@ -238,15 +368,17 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
             val pollJob = launch {
                 while (true) {
                     delay(1000)
-                    _lightningOperation.value = wallet?.getState()?.operation
+                    try {
+                        _lightningOperation.value = repository.getState().operation
+                    } catch (_: Exception) {}
                 }
             }
 
-            val result = runCatching<String?> { wallet?.payLightning(bolt11) }
+            val result = runCatching<String?> { repository.payLightning(bolt11) }
             pollJob.cancel()
             _lightningOperation.value = null
 
-            result.onSuccess {
+            if (result.isSuccess) {
                 refreshState()
                 loadActivity()
             }
@@ -257,15 +389,15 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun receiveLightningCreateInvoice(amountSats: ULong, onResult: (Result<uniffi.oubli.SwapQuoteFfi>) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { wallet!!.swapLnToWbtc(amountSats, false) }
+            val result = runCatching { repository.swapLnToWbtc(amountSats, false) }
             launch(Dispatchers.Main) { onResult(result) }
         }
     }
 
     fun receiveLightningWait(swapId: String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { wallet!!.receiveLightningWait(swapId) }
-            result.onSuccess {
+            val result = runCatching { repository.receiveLightningWait(swapId) }
+            if (result.isSuccess) {
                 refreshState()
                 loadActivity()
             }
@@ -275,24 +407,114 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshBalance() {
         viewModelScope.launch(Dispatchers.IO) {
-            _isRefreshing.value = true
-            runCatching { wallet?.handleRefreshBalance() }
-                .onSuccess {
-                    refreshState()
-                    loadActivity()
+            _uiState.update { current ->
+                val screen = current.screenState
+                if (screen is ScreenState.Ready) {
+                    current.copy(screenState = screen.copy(isRefreshing = true))
+                } else {
+                    current
                 }
-                .onFailure { emitError(it) }
-            _isRefreshing.value = false
+            }
+            try {
+                repository.refreshBalance()
+                refreshState()
+                loadActivity()
+            } catch (e: Exception) {
+                emitError(e)
+            }
+            _uiState.update { current ->
+                val screen = current.screenState
+                if (screen is ScreenState.Ready) {
+                    current.copy(screenState = screen.copy(isRefreshing = false))
+                } else {
+                    current
+                }
+            }
         }
     }
 
-    fun loadActivity() {
+    private fun loadActivity() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.getActivity() }
-                .onSuccess { events ->
-                    if (events != null) _activity.value = events
+            try {
+                val events = repository.getActivity()
+                val contacts = (_uiState.value.screenState as? ScreenState.Ready)?.contacts ?: emptyList()
+                val nameMap = buildContactNameMap(events, contacts)
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Ready) {
+                        current.copy(screenState = screen.copy(activity = events, activityContactNames = nameMap))
+                    } else {
+                        current
+                    }
                 }
-                .onFailure { emitError(it) }
+            } catch (e: Exception) {
+                emitError(e)
+            }
+        }
+    }
+
+    private fun buildContactNameMap(
+        events: List<uniffi.oubli.ActivityEventFfi>,
+        contacts: List<ContactFfi>,
+    ): Map<String, String> {
+        if (contacts.isEmpty()) return emptyMap()
+        val map = mutableMapOf<String, String>()
+        for (event in events) {
+            val recipient = repository.getTransferRecipientSync(event.txHash) ?: continue
+            val contact = contacts.firstOrNull { c ->
+                c.addresses.any { it.address.equals(recipient, ignoreCase = true) }
+            } ?: continue
+            map[event.txHash] = contact.name
+        }
+        return map
+    }
+
+    // ---- Contacts ----
+
+    fun loadContacts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val contacts = repository.getContacts()
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Ready) {
+                        current.copy(screenState = screen.copy(contacts = contacts))
+                    } else {
+                        current
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun saveContact(contact: ContactFfi) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.saveContact(contact)
+                loadContacts()
+            } catch (e: Exception) {
+                emitError(e)
+            }
+        }
+    }
+
+    fun deleteContact(contactId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.deleteContact(contactId)
+                loadContacts()
+            } catch (e: Exception) {
+                emitError(e)
+            }
+        }
+    }
+
+    fun updateContactLastUsed(contactId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.updateContactLastUsed(contactId)
+                loadContacts()
+            } catch (_: Exception) {}
         }
     }
 
@@ -300,25 +522,27 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun startSeedBackup(mnemonic: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.handleStartSeedBackup(mnemonic) }
-                .onSuccess { backupState ->
-                    _seedBackupState.value = backupState
-                    refreshState()
+            try {
+                val backupState = repository.startSeedBackup(mnemonic)
+                if (backupState != null) {
+                    _uiState.update { it.copy(screenState = ScreenState.SeedBackup(backupState)) }
                 }
-                .onFailure { emitError(it) }
+                refreshState()
+            } catch (e: Exception) {
+                emitError(e)
+            }
         }
     }
 
     fun verifySeedWord(promptIndex: UInt, answer: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.handleVerifySeedWord(promptIndex, answer) }
-                .onSuccess { correct ->
-                    launch(Dispatchers.Main) { onResult(correct ?: false) }
-                }
-                .onFailure {
-                    emitError(it)
-                    launch(Dispatchers.Main) { onResult(false) }
-                }
+            try {
+                val correct = repository.verifySeedWord(promptIndex, answer) ?: false
+                launch(Dispatchers.Main) { onResult(correct) }
+            } catch (e: Exception) {
+                emitError(e)
+                launch(Dispatchers.Main) { onResult(false) }
+            }
         }
     }
 
@@ -326,28 +550,21 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun getMnemonic(onResult: (Result<String>) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { wallet?.getMnemonic() ?: throw IllegalStateException("Wallet not initialized") }
+            val result = runCatching { repository.getMnemonic() }
             launch(Dispatchers.Main) { onResult(result) }
         }
     }
 
-    // ---- Debug Settings ----
+    // ---- Message handling ----
 
-    fun updateRpcUrl(url: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { wallet?.updateRpcUrl(url) }
-                .onSuccess {
-                    getApplication<Application>()
-                        .getSharedPreferences("oubli_debug", Context.MODE_PRIVATE)
-                        .edit().putString("rpc_url", url).apply()
-                    _successEvents.tryEmit("RPC endpoint updated")
-                }
-                .onFailure { emitError(it) }
+    fun onMessageShown(id: Long) {
+        _uiState.update { current ->
+            if (current.userMessage?.id == id) {
+                current.copy(userMessage = null)
+            } else {
+                current
+            }
         }
-    }
-
-    fun getRpcUrl(): String {
-        return wallet?.getRpcUrl() ?: ""
     }
 
     // ---- Helpers ----
@@ -357,7 +574,19 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
             is OubliException -> throwable.message ?: "Unknown error"
             else -> throwable.message ?: "Unexpected error"
         }
-        _errorEvents.tryEmit(message)
+        emitError(message)
+    }
+
+    private fun emitError(message: String) {
+        _uiState.update { it.copy(userMessage = UserMessage(text = message, isError = true)) }
+    }
+
+    fun showMessage(message: String) {
+        _uiState.update { it.copy(userMessage = UserMessage(text = message, isError = false)) }
+    }
+
+    private fun emitSuccess(message: String) {
+        _uiState.update { it.copy(userMessage = UserMessage(text = message, isError = false)) }
     }
 
     private fun biometricUnlockErrorMessage(throwable: Throwable): String {
@@ -376,7 +605,7 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
             "cancel" in lowercased ->
                 "Authentication was canceled. Try again."
             "locked out" in lowercased ->
-                "Biometric authentication is temporarily locked. Use your device credential, then try again."
+                "Biometric authentication is temporarily locked. Wait a moment, then try again."
             "not available" in lowercased ->
                 "Biometric authentication is unavailable right now. Try again."
             else -> rawMessage

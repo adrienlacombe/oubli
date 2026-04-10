@@ -1,5 +1,5 @@
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, AeadCore, Nonce};
+use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 
 use crate::error::StoreError;
 
@@ -19,7 +19,8 @@ impl EncryptedBlob {
     /// Serialize to bytes: `[version(1) | nonce(12) | aad_len(2) | aad | ciphertext]`
     pub fn to_bytes(&self) -> Vec<u8> {
         let aad_len = (self.aad.len() as u16).to_be_bytes();
-        let mut out = Vec::with_capacity(1 + NONCE_LEN + 2 + self.aad.len() + self.ciphertext.len());
+        let mut out =
+            Vec::with_capacity(1 + NONCE_LEN + 2 + self.aad.len() + self.ciphertext.len());
         out.push(self.version);
         out.extend_from_slice(&self.nonce);
         out.extend_from_slice(&aad_len);
@@ -43,8 +44,7 @@ impl EncryptedBlob {
         let nonce: [u8; NONCE_LEN] = data[1..1 + NONCE_LEN]
             .try_into()
             .map_err(|_| StoreError::Decryption("invalid nonce".into()))?;
-        let aad_len =
-            u16::from_be_bytes([data[1 + NONCE_LEN], data[1 + NONCE_LEN + 1]]) as usize;
+        let aad_len = u16::from_be_bytes([data[1 + NONCE_LEN], data[1 + NONCE_LEN + 1]]) as usize;
         let aad_start = 1 + NONCE_LEN + 2;
         if data.len() < aad_start + aad_len {
             return Err(StoreError::Decryption("blob truncated".into()));
@@ -73,7 +73,11 @@ pub struct BlobManager;
 
 impl BlobManager {
     /// Encrypt plaintext with the given KEK and AAD.
-    pub fn wrap(kek: &[u8; 32], plaintext: &[u8], app_id: &str) -> Result<EncryptedBlob, StoreError> {
+    pub fn wrap(
+        kek: &[u8; 32],
+        plaintext: &[u8],
+        app_id: &str,
+    ) -> Result<EncryptedBlob, StoreError> {
         let aad = build_aad(app_id, BLOB_VERSION);
         let cipher =
             Aes256Gcm::new_from_slice(kek).map_err(|e| StoreError::Encryption(e.to_string()))?;
@@ -96,7 +100,11 @@ impl BlobManager {
     }
 
     /// Decrypt an `EncryptedBlob` with the given KEK, verifying AAD.
-    pub fn unwrap(kek: &[u8; 32], blob: &EncryptedBlob, app_id: &str) -> Result<Vec<u8>, StoreError> {
+    pub fn unwrap(
+        kek: &[u8; 32],
+        blob: &EncryptedBlob,
+        app_id: &str,
+    ) -> Result<Vec<u8>, StoreError> {
         let expected_aad = build_aad(app_id, blob.version);
         if blob.aad != expected_aad {
             return Err(StoreError::AadMismatch);

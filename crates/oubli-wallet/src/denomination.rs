@@ -38,6 +38,19 @@ pub fn format_sats_display(sats: &str) -> String {
     sats.trim().to_string()
 }
 
+/// Calculate the fee in satoshis for a given amount and percentage.
+/// Returns 0 if fee_percent is zero or negative.
+/// Result is always a valid tongo amount (multiple of RATE sats).
+pub fn calculate_fee_sats(amount_sats: u64, fee_percent: f64) -> u64 {
+    if fee_percent <= 0.0 || amount_sats == 0 {
+        return 0;
+    }
+    let raw = (amount_sats as f64 * fee_percent / 100.0).ceil() as u64;
+    // Round up to nearest multiple of RATE (1 tongo unit = RATE sats).
+    // If the raw fee is 0 after rounding, no fee is charged.
+    ((raw + RATE - 1) / RATE) * RATE
+}
+
 // Keep the old names as aliases during migration — the bridge and core still reference them.
 pub fn btc_to_tongo_units(btc_str: &str) -> Result<u64, WalletError> {
     sats_to_tongo_units(btc_str)
@@ -98,5 +111,38 @@ mod tests {
         assert!(sats_to_tongo_units("").is_err());
         assert!(sats_to_tongo_units("-1").is_err());
         assert!(sats_to_tongo_units("1.5").is_err());
+    }
+
+    #[test]
+    fn fee_basic() {
+        // 1% of 1000 sats = 10 sats (1 tongo unit)
+        assert_eq!(calculate_fee_sats(1000, 1.0), 10);
+    }
+
+    #[test]
+    fn fee_rounds_up_to_rate() {
+        // 1% of 100 sats = 1 sat → rounds up to 10 (RATE)
+        assert_eq!(calculate_fee_sats(100, 1.0), 10);
+        // 1% of 50 sats = 0.5 → ceil = 1 → rounds to 10
+        assert_eq!(calculate_fee_sats(50, 1.0), 10);
+    }
+
+    #[test]
+    fn fee_zero_percent() {
+        assert_eq!(calculate_fee_sats(1000, 0.0), 0);
+        assert_eq!(calculate_fee_sats(1000, -1.0), 0);
+    }
+
+    #[test]
+    fn fee_zero_amount() {
+        assert_eq!(calculate_fee_sats(0, 1.0), 0);
+    }
+
+    #[test]
+    fn fee_large_amount() {
+        // 1% of 100_000 sats = 1000 sats
+        assert_eq!(calculate_fee_sats(100_000, 1.0), 1000);
+        // 0.5% of 100_000 sats = 500 sats
+        assert_eq!(calculate_fee_sats(100_000, 0.5), 500);
     }
 }

@@ -1,5 +1,6 @@
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
+use std::sync::Arc;
 
 use oubli_auth::{
     AuthAction, AuthState, AuthTier, AuthTransitionResult, KekDerivation, SessionConfig,
@@ -16,6 +17,26 @@ use crate::submitter::{PaymasterSubmitter, TransactionSubmitter};
 
 // ── ActivityEvent ────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub enum ActivityStatus {
+    #[default]
+    Unknown,
+    Pending,
+    Confirmed,
+    Failed,
+}
+
+impl ActivityStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActivityStatus::Unknown => "Unknown",
+            ActivityStatus::Pending => "Pending",
+            ActivityStatus::Confirmed => "Confirmed",
+            ActivityStatus::Failed => "Failed",
+        }
+    }
+}
+
 /// Simplified event for display in the UI activity list.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ActivityEvent {
@@ -23,6 +44,29 @@ pub struct ActivityEvent {
     pub amount_sats: Option<String>,
     pub tx_hash: String,
     pub block_number: u64,
+    #[serde(default)]
+    pub timestamp_secs: Option<u64>,
+    #[serde(default)]
+    pub status: ActivityStatus,
+}
+
+impl ActivityEvent {
+    pub(crate) fn normalize(&mut self) {
+        if self.status == ActivityStatus::Unknown {
+            self.status = if self.block_number == 0 {
+                ActivityStatus::Pending
+            } else {
+                ActivityStatus::Confirmed
+            };
+        }
+    }
+}
+
+/// Metadata stored locally for each transfer/withdraw tx.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TransferMeta {
+    amount_sats: String,
+    recipient: Option<String>,
 }
 
 // ── Storage key constants ────────────────────────────────────
@@ -33,7 +77,10 @@ const PUBKEY_KEY: &str = "oubli.pubkey";
 const STARKNET_ADDR_KEY: &str = "oubli.starknet.addr";
 const ACTIVITY_CACHE_KEY: &str = "oubli.activity.cache";
 const TRANSFER_AMOUNTS_KEY: &str = "oubli.transfer.amounts";
+const BIRTHDAY_BLOCK_KEY: &str = "oubli.birthday.block";
 const APP_ID: &str = "com.oubli.wallet";
+const DEVNET_CUSTOM_ACCOUNT_CLASS_HASH: &str =
+    "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564";
 
 // ── ActiveAccount ────────────────────────────────────────────
 
@@ -56,7 +103,7 @@ pub struct ActiveAccount {
 
 pub struct WalletCore {
     auth_state: AuthState,
-    storage: Box<dyn PlatformStorage>,
+    storage: Arc<dyn PlatformStorage>,
     config: NetworkConfig,
     rpc: Option<RpcClient>,
     submitter: Box<dyn TransactionSubmitter>,
@@ -87,6 +134,8 @@ impl WalletCore {
         config: NetworkConfig,
         submitter: Box<dyn TransactionSubmitter>,
     ) -> Self {
+        let storage: Arc<dyn PlatformStorage> = storage.into();
+
         // Check if we have stored keys (returning user vs first launch)
         let owner_public_key_hex = storage
             .secure_load(PUBKEY_KEY)
@@ -170,12 +219,16 @@ impl WalletCore {
         &self.config
     }
 
+    pub fn storage(&self) -> &Arc<dyn PlatformStorage> {
+        &self.storage
+    }
+
     pub fn rpc_url(&self) -> &str {
         &self.config.rpc_url
     }
 
     pub fn update_rpc_url(&mut self, new_url: String) -> Result<(), WalletError> {
-        self.config.rpc_url = new_url;
+        self.config.set_rpc_url(&new_url)?;
         self.rpc = None;
         self.init_rpc()?; // recreate immediately with new URL
         Ok(())
@@ -195,10 +248,7 @@ impl WalletCore {
 
     // ── Onboarding ───────────────────────────────────────────
 
-    pub async fn handle_onboarding(
-        &mut self,
-        mnemonic: &str,
-    ) -> Result<(), WalletError> {
+    pub async fn handle_onboarding(&mut self, mnemonic: &str) -> Result<(), WalletError> {
         // 1. Validate mnemonic
         krusty_kms::validate_mnemonic(mnemonic).map_err(|e| WalletError::Kms(e.to_string()))?;
 
@@ -238,6 +288,23 @@ impl WalletCore {
         self.init_rpc()?;
         let address_display = self.starknet_address_hex.clone().unwrap_or_default();
         self.active_account = Some(account);
+
+        // 6b. Store birthday block (once, on first onboarding only)
+        let has_birthday = self
+            .storage
+            .secure_load(BIRTHDAY_BLOCK_KEY)
+            .ok()
+            .flatten()
+            .is_some();
+        if !has_birthday {
+            if let Some(rpc) = &self.rpc {
+                if let Ok(block) = rpc.fetch_current_block_number().await {
+                    let _ = self
+                        .storage
+                        .secure_store(BIRTHDAY_BLOCK_KEY, block.to_string().as_bytes());
+                }
+            }
+        }
 
         if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
             let _ = fetch_and_decrypt_balance(rpc, acct).await;
@@ -411,7 +478,17 @@ impl WalletCore {
         let pub_key = &acct.tongo_account.keypair.public_key;
         let priv_key = acct.tongo_account.keypair.private_key.expose_secret();
         let cached = self.get_cached_activity();
-        match rpc.get_recent_activity(pub_key, Some(priv_key), &cached).await {
+        let birthday_block = self
+            .storage
+            .secure_load(BIRTHDAY_BLOCK_KEY)
+            .ok()
+            .flatten()
+            .and_then(|b| String::from_utf8(b).ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        match rpc
+            .get_recent_activity(pub_key, Some(priv_key), &cached, birthday_block)
+            .await
+        {
             Ok(mut events) => {
                 // Fill in missing amounts from local storage (for transfers
                 // made before on-chain hints were generated).
@@ -434,49 +511,93 @@ impl WalletCore {
 
     /// Load cached activity without making any RPC call.
     pub fn get_cached_activity(&self) -> Vec<ActivityEvent> {
-        let mut events: Vec<ActivityEvent> = self.storage
+        let mut events: Vec<ActivityEvent> = self
+            .storage
             .secure_load(ACTIVITY_CACHE_KEY)
             .ok()
             .flatten()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
+        normalize_activity_events(&mut events);
         self.fill_stored_amounts(&mut events);
         events
     }
 
-    /// Store a transfer amount locally so it can be shown even when
-    /// the on-chain hint is missing (e.g. no auditor key configured).
-    fn store_transfer_amount(&self, tx_hash: &str, amount_sats: &str) {
-        let mut amounts = self.load_transfer_amounts();
-        amounts.insert(tx_hash.to_string(), amount_sats.to_string());
-        if let Ok(json) = serde_json::to_vec(&amounts) {
+    /// Store transfer metadata (amount + recipient) locally.
+    fn store_transfer_meta(&self, tx_hash: &str, amount_sats: &str, recipient: Option<&str>) {
+        let mut metas = self.load_transfer_metas();
+        metas.insert(
+            tx_hash.to_string(),
+            TransferMeta {
+                amount_sats: amount_sats.to_string(),
+                recipient: recipient.map(|s| s.to_string()),
+            },
+        );
+        if let Ok(json) = serde_json::to_vec(&metas) {
             let _ = self.storage.secure_store(TRANSFER_AMOUNTS_KEY, &json);
         }
     }
 
-    /// Load locally-stored transfer amounts (tx_hash → amount_sats).
-    fn load_transfer_amounts(&self) -> std::collections::HashMap<String, String> {
-        self.storage
-            .secure_load(TRANSFER_AMOUNTS_KEY)
-            .ok()
-            .flatten()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+    /// Load locally-stored transfer metadata.
+    /// Backward-compatible: migrates old HashMap<String, String> format.
+    fn load_transfer_metas(&self) -> std::collections::HashMap<String, TransferMeta> {
+        let bytes = match self.storage.secure_load(TRANSFER_AMOUNTS_KEY) {
+            Ok(Some(b)) => b,
+            _ => return std::collections::HashMap::new(),
+        };
+
+        // Try new format first
+        if let Ok(metas) =
+            serde_json::from_slice::<std::collections::HashMap<String, TransferMeta>>(&bytes)
+        {
+            return metas;
+        }
+
+        // Fall back to old format: HashMap<String, String> (tx_hash → amount_sats)
+        if let Ok(old) = serde_json::from_slice::<std::collections::HashMap<String, String>>(&bytes)
+        {
+            let metas: std::collections::HashMap<String, TransferMeta> = old
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        TransferMeta {
+                            amount_sats: v,
+                            recipient: None,
+                        },
+                    )
+                })
+                .collect();
+            // Migrate: write back in new format
+            if let Ok(json) = serde_json::to_vec(&metas) {
+                let _ = self.storage.secure_store(TRANSFER_AMOUNTS_KEY, &json);
+            }
+            return metas;
+        }
+
+        std::collections::HashMap::new()
     }
 
     /// Fill in missing amounts on TransferOut events from local storage.
     fn fill_stored_amounts(&self, events: &mut [ActivityEvent]) {
-        let amounts = self.load_transfer_amounts();
-        if amounts.is_empty() {
+        let metas = self.load_transfer_metas();
+        if metas.is_empty() {
             return;
         }
         for ev in events.iter_mut() {
             if ev.amount_sats.is_none() && ev.event_type == "TransferOut" {
-                if let Some(sats) = amounts.get(&ev.tx_hash) {
-                    ev.amount_sats = Some(sats.clone());
+                if let Some(meta) = metas.get(&ev.tx_hash) {
+                    ev.amount_sats = Some(meta.amount_sats.clone());
                 }
             }
         }
+    }
+
+    /// Get the recipient address/pubkey for a given transaction hash.
+    pub fn get_transfer_recipient(&self, tx_hash: &str) -> Option<String> {
+        self.load_transfer_metas()
+            .get(tx_hash)
+            .and_then(|m| m.recipient.clone())
     }
 
     /// Add an optimistic activity event so the UI shows it immediately,
@@ -488,6 +609,8 @@ impl WalletCore {
             amount_sats: Some(amount_sats.to_string()),
             tx_hash: tx_hash.to_string(),
             block_number: 0, // pending — will be replaced by on-chain event
+            timestamp_secs: Some(now_unix_secs()),
+            status: ActivityStatus::Pending,
         };
         cached.insert(0, event);
         cached.truncate(20);
@@ -536,6 +659,22 @@ impl WalletCore {
             .ok_or(WalletError::NoActiveAccount)
     }
 
+    /// Deploy the Starknet account via paymaster if not yet on-chain.
+    /// No-op if already deployed. Waits for the deploy tx to confirm.
+    async fn ensure_account_deployed(&mut self) -> Result<(), WalletError> {
+        let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
+        let acct = self
+            .active_account
+            .as_ref()
+            .ok_or(WalletError::NoActiveAccount)?;
+        let config = self.config.clone();
+        let tx_hash = self.submitter.deploy_account(acct, &config, rpc).await?;
+        if let Some(hash) = tx_hash {
+            self.wait_for_tx(&hash).await?;
+        }
+        Ok(())
+    }
+
     /// Poll until a transaction is confirmed on-chain (ACCEPTED_ON_L2/L1).
     /// Times out after ~30 seconds.
     async fn wait_for_tx(&self, tx_hash: &str) -> Result<(), WalletError> {
@@ -546,7 +685,9 @@ impl WalletCore {
             }
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
-        Err(WalletError::Rpc(format!("tx {tx_hash} not confirmed after 30s")))
+        Err(WalletError::Rpc(format!(
+            "tx {tx_hash} not confirmed after 30s"
+        )))
     }
 
     // ── Auto-fund (sweep public WBTC into Tongo) ──────────────
@@ -556,6 +697,13 @@ impl WalletCore {
     /// fund to the next refresh cycle.
     /// Best-effort: all errors are swallowed and retried on next refresh.
     async fn handle_auto_fund(&mut self) {
+        if self.config.paymaster_url.trim().is_empty() {
+            // Without sponsored execution, public token balance is also the gas budget on
+            // devnet/local flows, so auto-funding would strand the account.
+            self.last_auto_fund_error = None;
+            return;
+        }
+
         let result: Result<Option<String>, WalletError> = async {
             let token_contract = Felt::from_hex(&self.config.token_contract)
                 .map_err(|e| WalletError::Rpc(format!("invalid token contract: {e}")))?;
@@ -718,6 +866,10 @@ impl WalletCore {
         String::from_utf8(seed_bytes).map_err(|e| WalletError::Kms(e.to_string()))
     }
 
+    pub fn chain_id(&self) -> &str {
+        &self.config.chain_id
+    }
+
     // ── Internal helpers ─────────────────────────────────────
 
     fn init_rpc(&mut self) -> Result<(), WalletError> {
@@ -730,10 +882,8 @@ impl WalletCore {
     fn format_balance(&self) -> (String, String) {
         match &self.active_account {
             Some(acct) => {
-                let balance_sats =
-                    format_sats_display(&tongo_units_to_sats(acct.balance as u64));
-                let pending_sats =
-                    format_sats_display(&tongo_units_to_sats(acct.pending as u64));
+                let balance_sats = format_sats_display(&tongo_units_to_sats(acct.balance as u64));
+                let pending_sats = format_sats_display(&tongo_units_to_sats(acct.pending as u64));
                 (balance_sats, pending_sats)
             }
             None => ("0".into(), "0".into()),
@@ -763,7 +913,10 @@ impl WalletCore {
         let result = {
             let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
             let submitter = &*self.submitter;
-            let acct = self.active_account.as_mut().ok_or(WalletError::NoActiveAccount)?;
+            let acct = self
+                .active_account
+                .as_mut()
+                .ok_or(WalletError::NoActiveAccount)?;
             crate::operations::execute_fund(acct, amount_sats, &config, rpc, submitter).await
         };
         match &result {
@@ -780,7 +933,10 @@ impl WalletCore {
         let result = {
             let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
             let submitter = &*self.submitter;
-            let acct = self.active_account.as_mut().ok_or(WalletError::NoActiveAccount)?;
+            let acct = self
+                .active_account
+                .as_mut()
+                .ok_or(WalletError::NoActiveAccount)?;
             crate::operations::execute_rollover(acct, &config, rpc, submitter).await
         };
         match &result {
@@ -819,13 +975,24 @@ impl WalletCore {
         let result = {
             let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
             let submitter = &*self.submitter;
-            let acct = self.active_account.as_mut().ok_or(WalletError::NoActiveAccount)?;
-            crate::operations::execute_transfer(acct, amount_sats, recipient, &config, rpc, submitter).await
+            let acct = self
+                .active_account
+                .as_mut()
+                .ok_or(WalletError::NoActiveAccount)?;
+            crate::operations::execute_transfer(
+                acct,
+                amount_sats,
+                recipient,
+                &config,
+                rpc,
+                submitter,
+            )
+            .await
         };
         match &result {
             Ok(ref tx_hash) => {
-                // Store amount locally so it shows even if on-chain hint is missing.
-                self.store_transfer_amount(tx_hash, amount_sats);
+                // Store amount + recipient locally so it shows even if on-chain hint is missing.
+                self.store_transfer_meta(tx_hash, amount_sats, Some(recipient));
                 self.add_optimistic_activity("TransferOut", amount_sats, tx_hash);
                 self.set_ready();
             }
@@ -847,12 +1014,41 @@ impl WalletCore {
         let result = {
             let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
             let submitter = &*self.submitter;
-            let acct = self.active_account.as_mut().ok_or(WalletError::NoActiveAccount)?;
-            crate::operations::execute_withdraw(acct, amount_sats, recipient, &config, rpc, submitter).await
+            let acct = self
+                .active_account
+                .as_mut()
+                .ok_or(WalletError::NoActiveAccount)?;
+            crate::operations::execute_withdraw(
+                acct,
+                amount_sats,
+                recipient,
+                &config,
+                rpc,
+                submitter,
+            )
+            .await
         };
         match &result {
             Ok(ref tx_hash) => {
-                self.add_optimistic_activity("Withdraw", amount_sats, tx_hash);
+                // Include fee in the displayed amount so the user sees the total deducted.
+                // Self-withdraws don't incur a fee.
+                let display_sats = if let (Ok(sats), Some(acct)) =
+                    (amount_sats.parse::<u64>(), self.active_account.as_ref())
+                {
+                    let is_self = Felt::from_hex(recipient)
+                        .map(|r| r == acct.starknet_address)
+                        .unwrap_or(false);
+                    if is_self {
+                        amount_sats.to_string()
+                    } else {
+                        let fee = crate::denomination::calculate_fee_sats(sats, config.fee_percent);
+                        (sats + fee).to_string()
+                    }
+                } else {
+                    amount_sats.to_string()
+                };
+                self.store_transfer_meta(tx_hash, &display_sats, Some(recipient));
+                self.add_optimistic_activity("Withdraw", &display_sats, tx_hash);
                 self.set_ready();
             }
             Err(e) => self.set_error(e.to_string()),
@@ -860,7 +1056,11 @@ impl WalletCore {
         result
     }
 
-    pub async fn send_token(&mut self, to_address: &Felt, amount: u128) -> Result<String, WalletError> {
+    pub async fn send_token(
+        &mut self,
+        to_address: &Felt,
+        amount: u128,
+    ) -> Result<String, WalletError> {
         self.require_t2()?;
         let config = self.config.clone();
         let erc20_addr = Felt::from_hex(&config.token_contract)
@@ -886,18 +1086,21 @@ impl WalletCore {
         };
 
         let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
-        let acct = self.active_account.as_ref().ok_or(WalletError::NoActiveAccount)?;
+        let acct = self
+            .active_account
+            .as_ref()
+            .ok_or(WalletError::NoActiveAccount)?;
         self.submitter.ensure_deployed(acct, &config, rpc).await?;
 
-        let acct = self.active_account.as_ref().ok_or(WalletError::NoActiveAccount)?;
+        let acct = self
+            .active_account
+            .as_ref()
+            .ok_or(WalletError::NoActiveAccount)?;
         let tx_hash = self.submitter.submit(acct, vec![transfer_call]).await?;
         Ok(tx_hash)
     }
 
-    pub async fn handle_ragequit_op(
-        &mut self,
-        recipient: &str,
-    ) -> Result<String, WalletError> {
+    pub async fn handle_ragequit_op(&mut self, recipient: &str) -> Result<String, WalletError> {
         self.require_t2()?;
         self.set_processing("ragequit");
         // Re-sync cipher_balance from chain before generating proof
@@ -906,7 +1109,10 @@ impl WalletCore {
         let result = {
             let rpc = self.rpc.as_ref().ok_or(WalletError::NoActiveAccount)?;
             let submitter = &*self.submitter;
-            let acct = self.active_account.as_mut().ok_or(WalletError::NoActiveAccount)?;
+            let acct = self
+                .active_account
+                .as_mut()
+                .ok_or(WalletError::NoActiveAccount)?;
             crate::operations::execute_ragequit(acct, recipient, &config, rpc, submitter).await
         };
         match &result {
@@ -915,6 +1121,19 @@ impl WalletCore {
         }
         result
     }
+}
+
+fn normalize_activity_events(events: &mut [ActivityEvent]) {
+    for event in events {
+        event.normalize();
+    }
+}
+
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 // ── Balance fetch helper (free fn to avoid borrow issues) ────
@@ -959,11 +1178,12 @@ async fn fetch_and_decrypt_balance(
     // Sync TongoAccount internal state so KMS SDK balance checks are correct
     let nonce_bytes = state.nonce.to_bytes_be();
     let nonce_u64 = u64::from_be_bytes(nonce_bytes[24..32].try_into().unwrap_or([0u8; 8]));
-    acct.tongo_account.update_state(krusty_kms_common::AccountState {
-        balance,
-        pending_balance: pending,
-        nonce: nonce_u64,
-    });
+    acct.tongo_account
+        .update_state(krusty_kms_common::AccountState {
+            balance,
+            pending_balance: pending,
+            nonce: nonce_u64,
+        });
 
     // Fetch auditor key from the contract (required for audited operations)
     match rpc.contract().auditor_key().await {
@@ -993,6 +1213,7 @@ impl WalletCore {
             .ok_or(WalletError::NoActiveAccount)?;
 
         let engine = crate::swap::create_swap_engine(
+            Arc::clone(&self.storage),
             &acct.starknet_address,
             &acct.starknet_public_key,
             &acct.starknet_private_key,
@@ -1042,12 +1263,20 @@ impl WalletCore {
     }
 
     /// Create a Lightning BTC → WBTC swap. Returns a quote with LN invoice.
+    /// Syncs balance first so the account is initialised and any public tokens
+    /// are swept (which also deploys the account if needed).
+    /// If the account is not deployed, deploys it via the paymaster first.
     pub async fn handle_swap_ln_to_wbtc(
         &mut self,
         amount_sats: u64,
         exact_in: bool,
     ) -> Result<oubli_swap::types::SwapQuote, WalletError> {
         self.require_t2()?;
+        let _ = self.handle_refresh_balance().await;
+
+        // Deploy the account via paymaster if not yet on-chain.
+        self.ensure_account_deployed().await?;
+
         self.ensure_swap_engine().await?;
         self.swap_engine
             .as_ref()
@@ -1058,15 +1287,17 @@ impl WalletCore {
     }
 
     /// Execute a pending swap (sign and submit Starknet txs).
-    pub async fn handle_swap_execute(
-        &mut self,
-        swap_id: &str,
-    ) -> Result<(), WalletError> {
+    pub async fn handle_swap_execute(&mut self, swap_id: &str) -> Result<(), WalletError> {
         self.require_t2()?;
-        let engine = self.swap_engine.as_ref().ok_or(
-            WalletError::Network("swap engine not initialized".into()),
-        )?;
-        engine.execute_swap(swap_id).await.map_err(crate::swap::swap_err)
+        self.ensure_swap_engine().await?;
+        let engine = self
+            .swap_engine
+            .as_ref()
+            .ok_or(WalletError::Network("swap engine not initialized".into()))?;
+        engine
+            .execute_swap(swap_id)
+            .await
+            .map_err(crate::swap::swap_err)
     }
 
     /// Wait for an incoming Lightning payment and claim WBTC.
@@ -1077,9 +1308,11 @@ impl WalletCore {
         swap_id: &str,
     ) -> Result<(), WalletError> {
         self.require_t2()?;
-        let engine = self.swap_engine.as_ref().ok_or(
-            WalletError::Network("swap engine not initialized".into()),
-        )?;
+        self.ensure_swap_engine().await?;
+        let engine = self
+            .swap_engine
+            .as_ref()
+            .ok_or(WalletError::Network("swap engine not initialized".into()))?;
         engine
             .wait_for_incoming_swap(swap_id)
             .await
@@ -1093,12 +1326,14 @@ impl WalletCore {
 
     /// Get the status of a swap.
     pub async fn handle_swap_status(
-        &self,
+        &mut self,
         swap_id: &str,
     ) -> Result<oubli_swap::types::SwapStatus, WalletError> {
-        let engine = self.swap_engine.as_ref().ok_or(
-            WalletError::Network("swap engine not initialized".into()),
-        )?;
+        self.ensure_swap_engine().await?;
+        let engine = self
+            .swap_engine
+            .as_ref()
+            .ok_or(WalletError::Network("swap engine not initialized".into()))?;
         engine
             .get_swap_status(swap_id)
             .await
@@ -1107,11 +1342,13 @@ impl WalletCore {
 
     /// Get all active/pending swaps.
     pub async fn handle_swap_list(
-        &self,
+        &mut self,
     ) -> Result<Vec<oubli_swap::types::SwapSummary>, WalletError> {
-        let engine = self.swap_engine.as_ref().ok_or(
-            WalletError::Network("swap engine not initialized".into()),
-        )?;
+        self.ensure_swap_engine().await?;
+        let engine = self
+            .swap_engine
+            .as_ref()
+            .ok_or(WalletError::Network("swap engine not initialized".into()))?;
         engine.get_all_swaps().await.map_err(crate::swap::swap_err)
     }
 
@@ -1142,10 +1379,7 @@ impl WalletCore {
     /// 3. Wait for the Tongo withdraw tx to confirm
     /// 4. Execute the swap (approve WBTC + lock in escrow via paymaster)
     /// 5. LP pays the Lightning invoice
-    pub async fn handle_pay_lightning(
-        &mut self,
-        bolt11: &str,
-    ) -> Result<String, WalletError> {
+    pub async fn handle_pay_lightning(&mut self, bolt11: &str) -> Result<String, WalletError> {
         self.require_t2()?;
         self.set_processing("ln: creating swap...");
 
@@ -1170,10 +1404,7 @@ impl WalletCore {
         //    Round up to the next multiple of 10 sats (1 tongo unit = 10 sats).
         self.set_processing("ln: withdrawing WBTC...");
         let input_sats: u64 = btc_str_to_sats(&quote.input_amount).ok_or_else(|| {
-            WalletError::Denomination(format!(
-                "invalid swap input amount: {}",
-                quote.input_amount
-            ))
+            WalletError::Denomination(format!("invalid swap input amount: {}", quote.input_amount))
         })?;
         let rounded_sats = ((input_sats + 9) / 10) * 10;
         let input_amount_str = rounded_sats.to_string();
@@ -1324,8 +1555,9 @@ fn derive_active_account(
     let tongo_addr = Felt::from_hex(&config.tongo_contract)
         .map_err(|e| WalletError::Kms(format!("invalid tongo contract address: {e}")))?;
 
-    let tongo_account = krusty_kms_sdk::TongoAccount::from_mnemonic(mnemonic, 0, 0, tongo_addr, None)
-        .map_err(|e| WalletError::Kms(e.to_string()))?;
+    let tongo_account =
+        krusty_kms_sdk::TongoAccount::from_mnemonic(mnemonic, 0, 0, tongo_addr, None)
+            .map_err(|e| WalletError::Kms(e.to_string()))?;
 
     let starknet_sk = krusty_kms::derive_private_key_with_coin_type(mnemonic, 0, 0, 9004, None)
         .map_err(|e| WalletError::Kms(e.to_string()))?;
@@ -1342,21 +1574,26 @@ fn derive_active_account(
     let class_hash = Felt::from_hex(&config.account_class_hash)
         .map_err(|e| WalletError::Kms(format!("invalid account class hash: {e}")))?;
 
-    // Use starknet-rs's well-tested get_contract_address for address derivation.
-    // ArgentX v0.4 constructor takes:
-    //   owner:    CairoCustomEnum { Starknet: { pubkey } } → serializes as [0, pubkey]
-    //   guardian: CairoOption::None                         → serializes as [1]
     let class_hash_rs = krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(
         &class_hash.to_bytes_be(),
     );
+    let constructor_calldata = if config.account_class_hash == DEVNET_CUSTOM_ACCOUNT_CLASS_HASH {
+        // Devnet's built-in "Custom" account class takes a single `public_key`.
+        vec![starknet_pub_key_rs]
+    } else {
+        // ArgentX v0.4 constructor takes:
+        //   owner:    CairoCustomEnum { Starknet: { pubkey } } → serializes as [0, pubkey]
+        //   guardian: CairoOption::None                         → serializes as [1]
+        vec![
+            krusty_kms_client::starknet_rust::core::types::Felt::ZERO, // owner enum variant: 0 = Starknet
+            starknet_pub_key_rs,                                       // owner pubkey
+            krusty_kms_client::starknet_rust::core::types::Felt::ONE, // guardian: CairoOption::None = 1
+        ]
+    };
     let addr_rs = krusty_kms_client::starknet_rust::core::utils::get_contract_address(
         krusty_kms_client::starknet_rust::core::types::Felt::ZERO, // salt
         class_hash_rs,
-        &[
-            krusty_kms_client::starknet_rust::core::types::Felt::ZERO, // owner enum variant: 0 = Starknet
-            starknet_pub_key_rs,                                        // owner pubkey
-            krusty_kms_client::starknet_rust::core::types::Felt::ONE,  // guardian: CairoOption::None = 1
-        ],
+        &constructor_calldata,
         krusty_kms_client::starknet_rust::core::types::Felt::ZERO, // deployer
     );
     let starknet_address = Felt::from_bytes_be(&addr_rs.to_bytes_be());
@@ -1384,9 +1621,24 @@ fn derive_active_account(
 mod tests {
     use super::*;
     use oubli_store::MockPlatformStorage;
+    use std::collections::HashMap;
 
     fn test_config() -> NetworkConfig {
         crate::networks::sepolia::config()
+    }
+
+    fn test_mnemonic() -> &'static str {
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    }
+
+    fn store_seed_blob(storage: &MockPlatformStorage, mnemonic: &str) {
+        let salt = storage.generate_hardware_salt().unwrap();
+        storage.secure_store(KEK_SALT_KEY, &salt).unwrap();
+        let kek = KekDerivation::derive_kek(&salt).unwrap();
+        let blob = BlobManager::wrap(&kek, mnemonic.as_bytes(), APP_ID).unwrap();
+        storage
+            .secure_store(SEED_BLOB_KEY, &blob.to_bytes())
+            .unwrap();
     }
 
     #[test]
@@ -1401,12 +1653,8 @@ mod tests {
     #[test]
     fn test_returning_user_starts_locked() {
         let storage = MockPlatformStorage::new();
-        storage
-            .secure_store(PUBKEY_KEY, b"0xdeadbeef")
-            .unwrap();
-        storage
-            .secure_store(STARKNET_ADDR_KEY, b"0xcafe")
-            .unwrap();
+        storage.secure_store(PUBKEY_KEY, b"0xdeadbeef").unwrap();
+        storage.secure_store(STARKNET_ADDR_KEY, b"0xcafe").unwrap();
         let core = WalletCore::new(Box::new(storage), test_config());
         assert_eq!(*core.state(), WalletState::Locked);
     }
@@ -1428,6 +1676,25 @@ mod tests {
     }
 
     #[test]
+    fn test_lock_keeps_returning_user_locked() {
+        let storage = MockPlatformStorage::new();
+        storage.secure_store(PUBKEY_KEY, b"0xdeadbeef").unwrap();
+        storage.secure_store(STARKNET_ADDR_KEY, b"0xcafe").unwrap();
+        let mut core = WalletCore::new(Box::new(storage), test_config());
+
+        core.wallet_state = WalletState::Ready {
+            address: "0xcafe".into(),
+            balance_sats: "5".into(),
+            pending_sats: "1".into(),
+        };
+        core.handle_lock();
+
+        assert_eq!(*core.state(), WalletState::Locked);
+        assert!(core.active_account().is_none());
+        assert_eq!(core.auth_tier(), AuthTier::T0Locked);
+    }
+
+    #[test]
     fn test_auth_tier_enforcement() {
         let storage = Box::new(MockPlatformStorage::new());
         let core = WalletCore::new(storage, test_config());
@@ -1436,14 +1703,20 @@ mod tests {
     }
 
     #[test]
+    fn test_require_t2_succeeds_with_loaded_account() {
+        let storage = Box::new(MockPlatformStorage::new());
+        let mut core = WalletCore::new(storage, test_config());
+        core.active_account = Some(derive_active_account(test_mnemonic(), &test_config()).unwrap());
+        core.auth_state.apply(AuthAction::BiometricSuccess);
+
+        assert!(core.require_t2().is_ok());
+    }
+
+    #[test]
     fn test_handle_background_drops_tier() {
         let storage = MockPlatformStorage::new();
-        storage
-            .secure_store(PUBKEY_KEY, b"0xdeadbeef")
-            .unwrap();
-        storage
-            .secure_store(STARKNET_ADDR_KEY, b"0xcafe")
-            .unwrap();
+        storage.secure_store(PUBKEY_KEY, b"0xdeadbeef").unwrap();
+        storage.secure_store(STARKNET_ADDR_KEY, b"0xcafe").unwrap();
         let mut core = WalletCore::new(Box::new(storage), test_config());
         // Simulate T2
         core.auth_state.apply(AuthAction::BiometricSuccess);
@@ -1455,4 +1728,153 @@ mod tests {
         assert!(core.active_account().is_none());
     }
 
+    #[test]
+    fn test_get_mnemonic_round_trip_from_stored_blob() {
+        let storage = MockPlatformStorage::new();
+        store_seed_blob(&storage, test_mnemonic());
+        let core = WalletCore::new(Box::new(storage), test_config());
+
+        assert_eq!(core.get_mnemonic().unwrap(), test_mnemonic());
+    }
+
+    #[test]
+    fn test_get_mnemonic_without_seed_returns_no_active_account() {
+        let core = WalletCore::new(Box::new(MockPlatformStorage::new()), test_config());
+        assert!(matches!(
+            core.get_mnemonic(),
+            Err(WalletError::NoActiveAccount)
+        ));
+    }
+
+    #[test]
+    fn test_load_transfer_metas_migrates_legacy_amount_map() {
+        let storage = MockPlatformStorage::new();
+        let legacy = HashMap::from([("0xtx".to_string(), "250".to_string())]);
+        storage
+            .secure_store(TRANSFER_AMOUNTS_KEY, &serde_json::to_vec(&legacy).unwrap())
+            .unwrap();
+
+        let core = WalletCore::new(Box::new(storage), test_config());
+        let metas = core.load_transfer_metas();
+
+        assert_eq!(metas["0xtx"].amount_sats, "250");
+        assert_eq!(metas["0xtx"].recipient, None);
+
+        let migrated_bytes = core
+            .storage
+            .secure_load(TRANSFER_AMOUNTS_KEY)
+            .unwrap()
+            .unwrap();
+        let migrated: HashMap<String, TransferMeta> =
+            serde_json::from_slice(&migrated_bytes).unwrap();
+        assert_eq!(migrated["0xtx"].amount_sats, "250");
+        assert_eq!(migrated["0xtx"].recipient, None);
+    }
+
+    #[test]
+    fn test_get_cached_activity_normalizes_and_backfills_transfer_amounts() {
+        let storage = MockPlatformStorage::new();
+        let core = WalletCore::new(Box::new(storage), test_config());
+
+        core.store_transfer_meta("0xtx", "1000", Some("0xrecipient"));
+        let cached = vec![
+            ActivityEvent {
+                event_type: "TransferOut".into(),
+                amount_sats: None,
+                tx_hash: "0xtx".into(),
+                block_number: 0,
+                timestamp_secs: None,
+                status: ActivityStatus::Unknown,
+            },
+            ActivityEvent {
+                event_type: "TransferIn".into(),
+                amount_sats: Some("200".into()),
+                tx_hash: "0xconfirmed".into(),
+                block_number: 42,
+                timestamp_secs: Some(123),
+                status: ActivityStatus::Unknown,
+            },
+        ];
+        core.storage
+            .secure_store(ACTIVITY_CACHE_KEY, &serde_json::to_vec(&cached).unwrap())
+            .unwrap();
+
+        let loaded = core.get_cached_activity();
+
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].status, ActivityStatus::Pending);
+        assert_eq!(loaded[0].amount_sats.as_deref(), Some("1000"));
+        assert_eq!(loaded[1].status, ActivityStatus::Confirmed);
+        assert_eq!(
+            core.get_transfer_recipient("0xtx").as_deref(),
+            Some("0xrecipient")
+        );
+    }
+
+    #[test]
+    fn test_add_optimistic_activity_persists_pending_event_and_truncates() {
+        let storage = MockPlatformStorage::new();
+        let core = WalletCore::new(Box::new(storage), test_config());
+
+        let cached: Vec<ActivityEvent> = (0..20)
+            .map(|idx| ActivityEvent {
+                event_type: "TransferIn".into(),
+                amount_sats: Some(idx.to_string()),
+                tx_hash: format!("0x{idx:02x}"),
+                block_number: 10 + idx,
+                timestamp_secs: Some(1_700_000_000 + idx),
+                status: ActivityStatus::Confirmed,
+            })
+            .collect();
+        core.storage
+            .secure_store(ACTIVITY_CACHE_KEY, &serde_json::to_vec(&cached).unwrap())
+            .unwrap();
+
+        core.add_optimistic_activity("TransferOut", "321", "0xnew");
+        let loaded = core.get_cached_activity();
+
+        assert_eq!(loaded.len(), 20);
+        assert_eq!(loaded[0].tx_hash, "0xnew");
+        assert_eq!(loaded[0].status, ActivityStatus::Pending);
+        assert_eq!(loaded[0].amount_sats.as_deref(), Some("321"));
+        assert!(loaded[0].timestamp_secs.is_some());
+        assert!(!loaded.iter().any(|event| event.tx_hash == "0x13"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_unlock_biometric_rejects_failed_authentication() {
+        let storage = MockPlatformStorage::new().with_biometric(true, false);
+        storage.secure_store(PUBKEY_KEY, b"0xdeadbeef").unwrap();
+        storage.secure_store(STARKNET_ADDR_KEY, b"0xcafe").unwrap();
+        let mut core = WalletCore::new(Box::new(storage), test_config());
+
+        let err = core.handle_unlock_biometric().await.unwrap_err();
+        match err {
+            WalletError::InvalidState { expected, got } => {
+                assert_eq!(expected, "biometric success");
+                assert_eq!(got, "biometric authentication failed");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert_eq!(core.auth_tier(), AuthTier::T0Locked);
+    }
+
+    #[tokio::test]
+    async fn test_handle_unlock_biometric_rejects_when_not_locked() {
+        let storage = MockPlatformStorage::new().with_biometric(true, true);
+        storage.secure_store(PUBKEY_KEY, b"0xdeadbeef").unwrap();
+        storage.secure_store(STARKNET_ADDR_KEY, b"0xcafe").unwrap();
+        let mut core = WalletCore::new(Box::new(storage), test_config());
+        core.auth_state.apply(AuthAction::BiometricSuccess);
+
+        let err = core.handle_unlock_biometric().await.unwrap_err();
+        match err {
+            WalletError::InvalidState { expected, got } => {
+                assert_eq!(expected, "T0Locked");
+                assert_eq!(got, "T2Transact");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert_eq!(core.auth_tier(), AuthTier::T2Transact);
+    }
 }

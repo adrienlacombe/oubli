@@ -1,14 +1,19 @@
+import org.gradle.api.tasks.testing.Test
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
+    jacoco
     kotlin("kapt")
 }
 
 android {
     namespace = "com.oubli.wallet"
-    compileSdk = 35
+    compileSdk = 36
 
     signingConfigs {
         create("release") {
@@ -22,9 +27,9 @@ android {
     defaultConfig {
         applicationId = "com.oubli.wallet"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 55
-        versionName = "0.1.54"
+        targetSdk = 36
+        versionCode = 64
+        versionName = "0.1.63"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -117,10 +122,69 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("app.cash.turbine:turbine:1.2.0")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
+
+tasks.withType<Test>().configureEach {
+    extensions.configure(JacocoTaskExtension::class) {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
+tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+
+    group = "verification"
+    description = "Generate JaCoCo coverage reports for debug JVM unit tests."
+
+    val coverageExcludes = listOf(
+        "**/R.class",
+        "**/R$*.class",
+        "**/BuildConfig.*",
+        "**/Manifest*.*",
+        "**/*Test*.*",
+        "**/*\$Lambda$*.*",
+        "**/*\$inlined$*.*",
+        "**/*Preview*.*",
+        "**/Hilt_*.*",
+        "**/*_Factory.*",
+        "**/*_HiltModules*.*",
+        "**/*_MembersInjector.*",
+        "**/Dagger*.*",
+        "**/di/**",
+        "**/uniffi/oubli/**"
+    )
+
+    classDirectories.setFrom(
+        files(
+            fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) {
+                exclude(coverageExcludes)
+            },
+            fileTree(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")) {
+                exclude(coverageExcludes)
+            }
+        )
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    additionalSourceDirs.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory) {
+            include("jacoco/testDebugUnitTest.exec")
+            include("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+        }
+    )
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
 }
 
 kapt {

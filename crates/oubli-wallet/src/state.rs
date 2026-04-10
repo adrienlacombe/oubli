@@ -12,14 +12,9 @@ pub enum WalletState {
         pending_sats: String,
     },
     /// Operation in flight.
-    Processing {
-        address: String,
-        operation: String,
-    },
+    Processing { address: String, operation: String },
     /// An error the user needs to dismiss.
-    Error {
-        message: String,
-    },
+    Error { message: String },
     /// Seed backup flow in progress.
     SeedBackup,
     /// Wallet has been wiped.
@@ -31,9 +26,7 @@ impl WalletState {
     pub fn is_active(&self) -> bool {
         matches!(
             self,
-            WalletState::Ready { .. }
-                | WalletState::Processing { .. }
-                | WalletState::SeedBackup
+            WalletState::Ready { .. } | WalletState::Processing { .. } | WalletState::SeedBackup
         )
     }
 

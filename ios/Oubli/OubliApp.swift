@@ -29,6 +29,7 @@ struct OubliApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .preferredColorScheme(.dark)
         }
     }
 }

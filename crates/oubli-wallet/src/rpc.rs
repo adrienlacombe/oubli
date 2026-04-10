@@ -5,7 +5,7 @@ use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
 use crate::config::NetworkConfig;
-use crate::core::ActivityEvent;
+use crate::core::{ActivityEvent, ActivityStatus};
 use crate::denomination::{format_sats_display, tongo_units_to_sats};
 use crate::error::WalletError;
 
@@ -34,7 +34,9 @@ impl RpcClient {
             .map_err(|e| WalletError::Rpc(format!("invalid tongo contract address: {e}")))?;
 
         // starknet-client uses starknet's CoreFelt (re-exported)
-        let core_felt = krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(&tongo_address.to_bytes_be());
+        let core_felt = krusty_kms_client::starknet_rust::core::types::Felt::from_bytes_be(
+            &tongo_address.to_bytes_be(),
+        );
 
         let provider = Arc::new(provider);
         let contract = TongoContract::new(provider, core_felt);
@@ -45,9 +47,119 @@ impl RpcClient {
         })
     }
 
+    /// Fetch the current block number from the RPC.
+    pub async fn fetch_current_block_number(&self) -> Result<u64, WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "starknet_blockNumber",
+            "params": []
+        });
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(&self.rpc_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        json.get("result")
+            .and_then(|r| r.as_u64())
+            .ok_or_else(|| WalletError::Rpc("Failed to parse block number".into()))
+    }
+
+    /// Fetch a block timestamp from the RPC.
+    pub async fn fetch_block_timestamp(&self, block_number: u64) -> Result<u64, WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "starknet_getBlockWithTxHashes",
+            "params": [{ "block_number": block_number }]
+        });
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(&self.rpc_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        json.get("result")
+            .and_then(|result| result.get("timestamp"))
+            .and_then(|timestamp| timestamp.as_u64())
+            .ok_or_else(|| WalletError::Rpc("Failed to parse block timestamp".into()))
+    }
+
+    /// Fetch a transaction status suitable for activity rendering.
+    pub async fn fetch_tx_activity_status(
+        &self,
+        tx_hash: &str,
+    ) -> Result<(ActivityStatus, Option<u64>), WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "starknet_getTransactionReceipt",
+            "params": [tx_hash]
+        });
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(&self.rpc_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| WalletError::Rpc(e.to_string()))?;
+
+        if let Some(error) = json.get("error") {
+            let error_text = error.to_string().to_ascii_lowercase();
+            if error_text.contains("not found") {
+                return Ok((ActivityStatus::Pending, None));
+            }
+            return Err(WalletError::Rpc(format!(
+                "starknet_getTransactionReceipt error: {error}"
+            )));
+        }
+
+        let result = match json.get("result") {
+            Some(result) => result,
+            None => return Ok((ActivityStatus::Pending, None)),
+        };
+
+        let finality_status = result
+            .get("finality_status")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let execution_status = result
+            .get("execution_status")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let block_number = result.get("block_number").and_then(|value| value.as_u64());
+
+        let status = if execution_status == "REVERTED" || finality_status == "REJECTED" {
+            ActivityStatus::Failed
+        } else if finality_status == "ACCEPTED_ON_L1" || finality_status == "ACCEPTED_ON_L2" {
+            ActivityStatus::Confirmed
+        } else {
+            ActivityStatus::Pending
+        };
+
+        Ok((status, block_number))
+    }
+
     /// Returns true if any contract is deployed at `account_address`.
     /// The `_expected_class_hash` parameter is retained for API compatibility but not checked,
-    /// since accounts may be upgraded to a different class (e.g. OZ → Argent).
+    /// since accounts may be upgraded to a different class over time.
     pub async fn is_account_deployed(
         &self,
         account_address: &Felt,
@@ -68,9 +180,14 @@ impl RpcClient {
             .await
             .map_err(|e| WalletError::Rpc(e.to_string()))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
         if !status.is_success() {
-            return Err(WalletError::Rpc(format!("getClassHashAt failed ({status}): {text}")));
+            return Err(WalletError::Rpc(format!(
+                "getClassHashAt failed ({status}): {text}"
+            )));
         }
         let json: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| WalletError::Rpc(e.to_string()))?;
@@ -122,7 +239,10 @@ impl RpcClient {
             .send()
             .await
             .map_err(|e| WalletError::Rpc(e.to_string()))?;
-        let text = resp.text().await.map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
         let json: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| WalletError::Rpc(e.to_string()))?;
         if let Some(result) = json.get("result") {
@@ -162,9 +282,14 @@ impl RpcClient {
             .await
             .map_err(|e| WalletError::Rpc(e.to_string()))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| WalletError::Rpc(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| WalletError::Rpc(e.to_string()))?;
         if !status.is_success() {
-            return Err(WalletError::Rpc(format!("starknet_call balance_of failed ({status}): {text}")));
+            return Err(WalletError::Rpc(format!(
+                "starknet_call balance_of failed ({status}): {text}"
+            )));
         }
         let json: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| WalletError::Rpc(e.to_string()))?;
@@ -197,6 +322,7 @@ impl RpcClient {
         pub_key: &ProjectivePoint,
         private_key: Option<&Felt>,
         cached: &[ActivityEvent],
+        birthday_block: Option<u64>,
     ) -> Result<Vec<ActivityEvent>, WalletError> {
         let affine = pub_key
             .to_affine()
@@ -211,7 +337,12 @@ impl RpcClient {
         // Use the highest cached block number as from_block to avoid re-scanning
         // all history. We re-fetch from that block (inclusive) to catch any events
         // in the same block that we might have missed.
-        let from_block = cached.iter().map(|e| e.block_number).max();
+        // Fall back to the wallet birthday block if no cached events exist.
+        let from_block = cached
+            .iter()
+            .map(|e| e.block_number)
+            .max()
+            .or(birthday_block);
 
         // Compute event selectors via starknet_keccak.
         let fund_sel = starknet_keccak_hex(b"FundEvent");
@@ -223,14 +354,13 @@ impl RpcClient {
         // Query 1: Events where pub_key is at keys[1..2] (Fund, OutsideFund,
         //          Withdraw, Ragequit, TransferIn).
         let selectors_q1 = vec![
-            &fund_sel, &outside_fund_sel, &withdraw_sel, &ragequit_sel,
+            &fund_sel,
+            &outside_fund_sel,
+            &withdraw_sel,
+            &ragequit_sel,
             &transfer_sel,
         ];
-        let keys_q1 = serde_json::json!([
-            selectors_q1,
-            [&pk_x],
-            [&pk_y]
-        ]);
+        let keys_q1 = serde_json::json!([selectors_q1, [&pk_x], [&pk_y]]);
         let events_q1 = self.fetch_raw_events(&client, &keys_q1, from_block).await?;
 
         for ev in &events_q1 {
@@ -240,37 +370,108 @@ impl RpcClient {
         }
 
         // Query 2: TransferOut events where pub_key is sender (keys[3..4]).
-        let keys_q2 = serde_json::json!([
-            [&transfer_sel],
-            [],
-            [],
-            [&pk_x],
-            [&pk_y]
-        ]);
+        let keys_q2 = serde_json::json!([[&transfer_sel], [], [], [&pk_x], [&pk_y]]);
         let events_q2 = self.fetch_raw_events(&client, &keys_q2, from_block).await?;
 
         for ev in &events_q2 {
             if let Some(activity) = raw_event_to_activity(ev, pub_key, private_key) {
-                if !new_events.iter().any(|a| a.tx_hash == activity.tx_hash && a.event_type == activity.event_type) {
+                if !new_events
+                    .iter()
+                    .any(|a| a.tx_hash == activity.tx_hash && a.event_type == activity.event_type)
+                {
                     new_events.push(activity);
                 }
             }
         }
 
+        // Merge fee TransferOut into same-tx Withdraw: a withdraw with fee
+        // emits both a WithdrawEvent and a TransferEvent (fee to collector)
+        // in the same transaction. Combine their amounts into one Withdraw.
+        let fee_tx_hashes: std::collections::HashSet<String> = new_events
+            .iter()
+            .filter(|e| e.event_type == "Withdraw")
+            .filter(|w| {
+                new_events
+                    .iter()
+                    .any(|t| t.tx_hash == w.tx_hash && t.event_type == "TransferOut")
+            })
+            .map(|w| w.tx_hash.clone())
+            .collect();
+
+        for tx in &fee_tx_hashes {
+            let fee_amount: Option<u64> = new_events
+                .iter()
+                .find(|e| &e.tx_hash == tx && e.event_type == "TransferOut")
+                .and_then(|e| e.amount_sats.as_ref())
+                .and_then(|s| s.parse().ok());
+            if let Some(fee) = fee_amount {
+                if let Some(w) = new_events
+                    .iter_mut()
+                    .find(|e| &e.tx_hash == tx && e.event_type == "Withdraw")
+                {
+                    if let Some(ref amt_str) = w.amount_sats {
+                        if let Ok(amt) = amt_str.parse::<u64>() {
+                            w.amount_sats = Some((amt + fee).to_string());
+                        }
+                    }
+                }
+            }
+        }
+        new_events
+            .retain(|e| !(fee_tx_hashes.contains(&e.tx_hash) && e.event_type == "TransferOut"));
+
         // Merge: prefer freshly-fetched events over cached (they may have
         // newly-decrypted amounts). Then add any cached events not re-fetched.
         let mut merged = new_events.clone();
         for ev in cached {
-            if !merged.iter().any(|a| a.tx_hash == ev.tx_hash && a.event_type == ev.event_type) {
+            if !merged
+                .iter()
+                .any(|a| a.tx_hash == ev.tx_hash && a.event_type == ev.event_type)
+            {
                 merged.push(ev.clone());
             }
         }
 
-        // Sort newest first, keep last 20. Treat block_number 0 as pending (newest).
+        let mut block_timestamps = std::collections::HashMap::new();
+        for event in &mut merged {
+            event.normalize();
+
+            if event.block_number == 0 || event.status == ActivityStatus::Pending {
+                if let Ok((status, block_number)) =
+                    self.fetch_tx_activity_status(&event.tx_hash).await
+                {
+                    event.status = status;
+                    if event.block_number == 0 {
+                        if let Some(block_number) = block_number {
+                            event.block_number = block_number;
+                        }
+                    }
+                }
+            }
+
+            if event.block_number > 0 && event.timestamp_secs.is_none() {
+                let timestamp = match block_timestamps.get(&event.block_number).copied() {
+                    Some(timestamp) => Some(timestamp),
+                    None => match self.fetch_block_timestamp(event.block_number).await {
+                        Ok(timestamp) => {
+                            block_timestamps.insert(event.block_number, timestamp);
+                            Some(timestamp)
+                        }
+                        Err(_) => None,
+                    },
+                };
+                event.timestamp_secs = timestamp;
+            }
+        }
+
+        // Sort newest first, keep last 20. Treat block_number 0 as pending/failed (newest).
         merged.sort_by(|a, b| {
             match (a.block_number, b.block_number) {
-                (0, 0) => std::cmp::Ordering::Equal,
-                (0, _) => std::cmp::Ordering::Less,  // a is pending → comes first
+                (0, 0) => b
+                    .timestamp_secs
+                    .unwrap_or(0)
+                    .cmp(&a.timestamp_secs.unwrap_or(0)),
+                (0, _) => std::cmp::Ordering::Less, // a is pending → comes first
                 (_, 0) => std::cmp::Ordering::Greater,
                 _ => b.block_number.cmp(&a.block_number),
             }
@@ -315,7 +516,8 @@ impl RpcClient {
             let mut json: serde_json::Value = serde_json::Value::Null;
             for attempt in 0..4u32 {
                 if attempt > 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * 2u64.pow(attempt))).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * 2u64.pow(attempt)))
+                        .await;
                 }
                 let resp = client
                     .post(&self.rpc_url)
@@ -324,7 +526,10 @@ impl RpcClient {
                     .await
                     .map_err(|e| WalletError::Rpc(e.to_string()))?;
                 let status = resp.status();
-                let text = resp.text().await.map_err(|e| WalletError::Rpc(e.to_string()))?;
+                let text = resp
+                    .text()
+                    .await
+                    .map_err(|e| WalletError::Rpc(e.to_string()))?;
                 if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     if attempt == 3 {
                         return Err(WalletError::Rpc("rate limited after 4 attempts".into()));
@@ -332,7 +537,10 @@ impl RpcClient {
                     continue;
                 }
                 match serde_json::from_str(&text) {
-                    Ok(v) => { json = v; break; }
+                    Ok(v) => {
+                        json = v;
+                        break;
+                    }
                     Err(e) if attempt < 3 => continue,
                     Err(e) => return Err(WalletError::Rpc(format!("RPC error: {e}"))),
                 }
@@ -407,20 +615,32 @@ fn raw_event_to_activity(
     let (event_type, amount_sats) = if selector == fund_sel {
         // Current format: keys=[selector, to.x, to.y, nonce], data=[amount]
         let amount = data.first().and_then(|v| v.as_str()).map(hex_to_u128)?;
-        ("Fund".to_string(), Some(format_sats_display(&tongo_units_to_sats(amount as u64))))
+        (
+            "Fund".to_string(),
+            Some(format_sats_display(&tongo_units_to_sats(amount as u64))),
+        )
     } else if selector == outside_fund_sel {
         // Current format: keys=[selector, to.x, to.y], data=[from, amount] or data=[amount]
         // Try last data element as amount (works for both old and new formats).
         let amount = data.last().and_then(|v| v.as_str()).map(hex_to_u128)?;
-        ("Fund".to_string(), Some(format_sats_display(&tongo_units_to_sats(amount as u64))))
+        (
+            "Fund".to_string(),
+            Some(format_sats_display(&tongo_units_to_sats(amount as u64))),
+        )
     } else if selector == withdraw_sel {
         // Current format: keys=[selector, from.x, from.y, nonce], data=[amount, to] or data=[amount]
         let amount = data.first().and_then(|v| v.as_str()).map(hex_to_u128)?;
-        ("Withdraw".to_string(), Some(format_sats_display(&tongo_units_to_sats(amount as u64))))
+        (
+            "Withdraw".to_string(),
+            Some(format_sats_display(&tongo_units_to_sats(amount as u64))),
+        )
     } else if selector == ragequit_sel {
         // Current format: keys=[selector, from.x, from.y, nonce], data=[amount, to] or data=[amount]
         let amount = data.first().and_then(|v| v.as_str()).map(hex_to_u128)?;
-        ("Ragequit".to_string(), Some(format_sats_display(&tongo_units_to_sats(amount as u64))))
+        (
+            "Ragequit".to_string(),
+            Some(format_sats_display(&tongo_units_to_sats(amount as u64))),
+        )
     } else if selector == rollover_sel {
         // Internal settlement — hide from user activity.
         return None;
@@ -443,7 +663,11 @@ fn raw_event_to_activity(
             _ => false,
         };
 
-        let label = if is_sender { "TransferOut" } else { "TransferIn" };
+        let label = if is_sender {
+            "TransferOut"
+        } else {
+            "TransferIn"
+        };
 
         // Try to decrypt transfer amount from hint_transfer (data[8..14]).
         let amount_sats = user_private_key.and_then(|priv_key| {
@@ -469,6 +693,8 @@ fn raw_event_to_activity(
         amount_sats,
         tx_hash,
         block_number,
+        timestamp_secs: None,
+        status: ActivityStatus::Confirmed,
     })
 }
 
@@ -506,7 +732,8 @@ fn decrypt_transfer_hint(
     nonce[0..16].copy_from_slice(&n_high.to_bytes_be()[16..32]);
     nonce[16..24].copy_from_slice(&n_low.to_bytes_be()[16..24]);
 
-    let shared_secret = krusty_kms_sdk::crypto::derive_shared_secret(private_key, counterparty).ok()?;
+    let shared_secret =
+        krusty_kms_sdk::crypto::derive_shared_secret(private_key, counterparty).ok()?;
     krusty_kms_sdk::crypto::decrypt_audit_hint(&ciphertext, &nonce, &shared_secret).ok()
 }
 
@@ -536,8 +763,7 @@ mod tests {
 
         // Serialize ciphertext+nonce into 6 felts using the SDK serializer
         // (this is what the Cairo contract emits on-chain).
-        let hint_felts =
-            krusty_kms_sdk::serialization::serialize_ae_balance(&ct, &nonce).unwrap();
+        let hint_felts = krusty_kms_sdk::serialization::serialize_ae_balance(&ct, &nonce).unwrap();
         assert_eq!(hint_felts.len(), 6);
 
         // Build the full data array for a TransferEvent:
@@ -545,10 +771,16 @@ mod tests {
         // = 4 + 4 + 6 + 6 = 20 felts (nonce is in keys[5])
         let zero = Felt::ZERO;
         let mut data_felts: Vec<Felt> = Vec::new();
-        for _ in 0..4 { data_felts.push(zero); } // transfer_balance (dummy)
-        for _ in 0..4 { data_felts.push(zero); } // transfer_balance_self (dummy)
-        data_felts.extend_from_slice(&hint_felts);  // hint_transfer at offset 8
-        for _ in 0..6 { data_felts.push(zero); } // hint_leftover (dummy)
+        for _ in 0..4 {
+            data_felts.push(zero);
+        } // transfer_balance (dummy)
+        for _ in 0..4 {
+            data_felts.push(zero);
+        } // transfer_balance_self (dummy)
+        data_felts.extend_from_slice(&hint_felts); // hint_transfer at offset 8
+        for _ in 0..6 {
+            data_felts.push(zero);
+        } // hint_leftover (dummy)
 
         // Convert to JSON values.
         let data_json: Vec<serde_json::Value> = data_felts
@@ -606,9 +838,8 @@ mod tests {
     fn test_nonce_felt_roundtrip() {
         // Use a nonce with all distinct bytes so any scrambling is obvious.
         let original_nonce: [u8; 24] = [
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-            0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
         ];
         let ciphertext = [0u8; 64]; // dummy, we only care about nonce
 
@@ -628,6 +859,9 @@ mod tests {
         recovered[0..16].copy_from_slice(&n_high.to_bytes_be()[16..32]);
         recovered[16..24].copy_from_slice(&n_low.to_bytes_be()[16..24]);
 
-        assert_eq!(recovered, original_nonce, "nonce roundtrip must be lossless");
+        assert_eq!(
+            recovered, original_nonce,
+            "nonce roundtrip must be lossless"
+        );
     }
 }

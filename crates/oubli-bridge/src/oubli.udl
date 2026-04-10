@@ -50,6 +50,9 @@ dictionary ActivityEventFFI {
     string? amount_sats;
     string tx_hash;
     u64 block_number;
+    u64? timestamp_secs;
+    string status;
+    string? explorer_url;
 };
 
 dictionary SwapQuoteFFI {
@@ -82,6 +85,26 @@ dictionary SwapLimitsFFI {
     string? output_max;
 };
 
+enum AddressTypeFFI {
+    "Oubli",
+    "Starknet",
+};
+
+dictionary ContactAddressFFI {
+    string address;
+    AddressTypeFFI address_type;
+    string? label;
+};
+
+dictionary ContactFFI {
+    string id;
+    string name;
+    sequence<ContactAddressFFI> addresses;
+    string? notes;
+    u64 created_at;
+    u64 last_used_at;
+};
+
 callback interface PlatformStorageCallback {
     [Throws=OubliError]
     void secure_store(string key, sequence<u8> value);
@@ -103,7 +126,7 @@ callback interface PlatformStorageCallback {
 
 interface OubliWallet {
     [Throws=OubliError]
-    constructor(PlatformStorageCallback storage);
+    constructor(PlatformStorageCallback storage, string? rpc_url, string? paymaster_api_key);
 
     WalletStateInfo get_state();
 
@@ -163,6 +186,8 @@ interface OubliWallet {
 
     double? get_btc_price_usd();
 
+    double? get_btc_price(string currency);
+
     [Throws=OubliError]
     SwapQuoteFFI swap_btc_to_wbtc(u64 amount_sats, boolean exact_in);
 
@@ -189,4 +214,27 @@ interface OubliWallet {
 
     [Throws=OubliError]
     string pay_lightning(string bolt11);
+
+    string calculate_fee(string amount_sats);
+
+    string calculate_send_fee(string amount_sats, string recipient);
+
+    double get_fee_percent();
+
+    // ── Contacts ─────────────────────────────────────────────
+
+    sequence<ContactFFI> get_contacts();
+
+    ContactFFI? find_contact_by_address(string address);
+
+    [Throws=OubliError]
+    string save_contact(ContactFFI contact);
+
+    [Throws=OubliError]
+    void delete_contact(string contact_id);
+
+    [Throws=OubliError]
+    void update_contact_last_used(string contact_id);
+
+    string? get_transfer_recipient(string tx_hash);
 };

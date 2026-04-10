@@ -1,5 +1,6 @@
 package com.oubli.wallet
 
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -21,11 +22,13 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         // Prevent screenshots on sensitive screens (FLAG_SECURE).
-        // In production this would be toggled per-screen; here we apply it globally.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE
-        )
+        val isDebug = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!isDebug) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        }
 
         setContent {
             OubliTheme {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -279,7 +280,13 @@ private fun VerificationStep(
             modifier = Modifier.fillMaxWidth(0.7f),
             enabled = answer.isNotBlank(),
         ) {
-            Text("Verify")
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Check")
         }
     }
 }
