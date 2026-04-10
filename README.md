@@ -93,6 +93,37 @@ Before editing any of these areas, check [`docs/change-map.md`](docs/change-map.
 - Wallet core, auth, and storage changes
 - Generated bindings and bundle outputs
 
+## Release & Publish
+
+### 1. Bump version
+
+Edit `android/app/build.gradle.kts` — increment `versionCode` and `versionName`.
+
+### 2. Tag a release
+
+```sh
+git tag v0.1.64
+git push origin v0.1.64
+```
+
+The **Release** workflow builds a signed APK and creates a GitHub Release with the APK attached.
+
+### 3. Publish to Zapstore
+
+Go to **Actions > Publish to Zapstore > Run workflow**, enter the tag (e.g. `v0.1.64`), and click **Run**. This downloads the release APK and publishes it to Zapstore.
+
+### Required GitHub secrets
+
+| Secret | Description |
+|---|---|
+| `OUBLI_KEYSTORE_BASE64` | Base64-encoded `android/oubli-release.jks` |
+| `OUBLI_KEYSTORE_PASSWORD` | Keystore password |
+| `OUBLI_MAINNET_RPC_URL` | Mainnet RPC URL (for `build.rs` compile-time encoding) |
+| `OUBLI_MAINNET_PAYMASTER_API_KEY` | Mainnet paymaster API key |
+| `OUBLI_FEE_COLLECTOR_PUBKEY` | Fee collector public key |
+| `OUBLI_FEE_PERCENT` | Fee percentage |
+| `NOSTR_NSEC` | Nostr private key (nsec) for Zapstore signing |
+
 ## Safety
 
 - Do not default local automation to mainnet.
