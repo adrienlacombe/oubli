@@ -852,18 +852,156 @@ internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
 
 
 
+// For large crates we prevent `MethodTooLargeException` (see #2340)
+// N.B. the name of the extension is very misleading, since it is 
+// rather `InterfaceTooLargeException`, caused by too many methods 
+// in the interface for large crates.
+//
+// By splitting the otherwise huge interface into two parts
+// * UniffiLib 
+// * IntegrityCheckingUniffiLib (this)
+// we allow for ~2x as many methods in the UniffiLib interface.
+// 
+// The `ffi_uniffi_contract_version` method and all checksum methods are put 
+// into `IntegrityCheckingUniffiLib` and these methods are called only once,
+// when the library is loaded.
+internal interface IntegrityCheckingUniffiLib : Library {
+    // Integrity check functions only
+    fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_generate_mnemonic(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_activity(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price_usd(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_cached_activity(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_contacts(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_fee_percent(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_mnemonic(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_rpc_url(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_state(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_transfer_recipient(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_complete_onboarding(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_fund(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_lock(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_ragequit(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_refresh_balance(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_rollover(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_send(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_start_seed_backup(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_transfer(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_biometric(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_verify_seed_word(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_withdraw(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_pay_lightning(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_execute(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_limits(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_list(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_ln_to_wbtc(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_status(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_wbtc_to_btc(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_contact_last_used(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic(
+): Short
+fun uniffi_oubli_bridge_checksum_constructor_oubliwallet_new(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_load(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_delete(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_request_biometric(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_biometric_available(
+): Short
+fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_generate_hardware_salt(
+): Short
+fun ffi_oubli_bridge_uniffi_contract_version(
+): Int
+
+}
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
-
 internal interface UniffiLib : Library {
     companion object {
         internal val INSTANCE: UniffiLib by lazy {
-            loadIndirect<UniffiLib>(componentName = "oubli")
-            .also { lib: UniffiLib ->
-                uniffiCheckContractApiVersion(lib)
-                uniffiCheckApiChecksums(lib)
-                uniffiCallbackInterfacePlatformStorageCallback.register(lib)
+            val componentName = "oubli"
+            // For large crates we prevent `MethodTooLargeException` (see #2340)
+            // N.B. the name of the extension is very misleading, since it is 
+            // rather `InterfaceTooLargeException`, caused by too many methods 
+            // in the interface for large crates.
+            //
+            // By splitting the otherwise huge interface into two parts
+            // * UniffiLib (this)
+            // * IntegrityCheckingUniffiLib
+            // And all checksum methods are put into `IntegrityCheckingUniffiLib`
+            // we allow for ~2x as many methods in the UniffiLib interface.
+            // 
+            // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
+            // so that we can (optionally!) call `uniffiCheckApiChecksums`...
+            loadIndirect<IntegrityCheckingUniffiLib>(componentName)
+                .also { lib: IntegrityCheckingUniffiLib ->
+                    uniffiCheckContractApiVersion(lib)
+                    uniffiCheckApiChecksums(lib)
                 }
+            // ... and then we load the library as `UniffiLib`
+            // N.B. we cannot use `loadIndirect` once and then try to cast it to `UniffiLib`
+            // => results in `java.lang.ClassCastException: com.sun.proxy.$Proxy cannot be cast to ...`
+            // error. So we must call `loadIndirect` twice. For crates large enough
+            // to trigger this issue, the performance impact is negligible, running on
+            // a macOS M1 machine the `loadIndirect` call takes ~50ms.
+            val lib = loadIndirect<UniffiLib>(componentName)
+            // No need to check the contract version and checksums, since 
+            // we already did that with `IntegrityCheckingUniffiLib` above.
+            uniffiCallbackInterfacePlatformStorageCallback.register(lib)
+            // Loading of library with integrity check done.
+            lib
         }
         
         // The Cleaner for the whole library
@@ -872,317 +1010,221 @@ internal interface UniffiLib : Library {
         }
     }
 
+    // FFI functions
     fun uniffi_oubli_bridge_fn_clone_oubliwallet(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Pointer
-    fun uniffi_oubli_bridge_fn_free_oubliwallet(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_constructor_oubliwallet_new(`storage`: Long,`rpcUrl`: RustBuffer.ByValue,`paymasterApiKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Pointer
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(`ptr`: Pointer,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_generate_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(`ptr`: Pointer,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price_usd(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Double
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_rpc_url(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_state(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(`ptr`: Pointer,`txHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_complete_onboarding(`ptr`: Pointer,`mnemonic`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_fund(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_lock(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_ragequit(`ptr`: Pointer,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_refresh_balance(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_rollover(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_send(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_start_seed_backup(`ptr`: Pointer,`mnemonic`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_transfer(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_biometric(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_verify_seed_word(`ptr`: Pointer,`promptIndex`: Int,`answer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_withdraw(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_pay_lightning(`ptr`: Pointer,`bolt11`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(`ptr`: Pointer,`contact`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_execute(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_limits(`ptr`: Pointer,`direction`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_list(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_ln_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_status(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_wbtc_to_btc(`ptr`: Pointer,`amountSats`: Long,`btcAddress`: RustBuffer.ByValue,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_update_rpc_url(`ptr`: Pointer,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_method_oubliwallet_validate_mnemonic(`ptr`: Pointer,`phrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_fn_init_callback_vtable_platformstoragecallback(`vtable`: UniffiVTableCallbackInterfacePlatformStorageCallback,
-    ): Unit
-    fun ffi_oubli_bridge_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun ffi_oubli_bridge_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun ffi_oubli_bridge_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun ffi_oubli_bridge_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun ffi_oubli_bridge_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_u8(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_u8(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
-    fun ffi_oubli_bridge_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_i8(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_i8(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
-    fun ffi_oubli_bridge_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_u16(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_u16(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Short
-    fun ffi_oubli_bridge_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_i16(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_i16(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Short
-    fun ffi_oubli_bridge_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_u32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_u32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Int
-    fun ffi_oubli_bridge_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_i32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_i32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Int
-    fun ffi_oubli_bridge_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_u64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_u64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Long
-    fun ffi_oubli_bridge_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_i64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_i64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Long
-    fun ffi_oubli_bridge_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_f32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_f32(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Float
-    fun ffi_oubli_bridge_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_f64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_f64(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Double
-    fun ffi_oubli_bridge_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_pointer(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_pointer(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Pointer
-    fun ffi_oubli_bridge_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_rust_buffer(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_rust_buffer(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    fun ffi_oubli_bridge_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_cancel_void(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_free_void(`handle`: Long,
-    ): Unit
-    fun ffi_oubli_bridge_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_generate_mnemonic(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_activity(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_btc_price_usd(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_cached_activity(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_contacts(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_fee_percent(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_mnemonic(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_rpc_url(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_state(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_get_transfer_recipient(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_complete_onboarding(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_fund(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_lock(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_ragequit(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_refresh_balance(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_rollover(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_send(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_start_seed_backup(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_transfer(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_biometric(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_verify_seed_word(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_withdraw(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_pay_lightning(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_execute(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_limits(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_list(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_ln_to_wbtc(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_status(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_wbtc_to_btc(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_contact_last_used(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_constructor_oubliwallet_new(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_load(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_delete(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_request_biometric(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_biometric_available(
-    ): Short
-    fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_generate_hardware_salt(
-    ): Short
-    fun ffi_oubli_bridge_uniffi_contract_version(
-    ): Int
-    
+): Pointer
+fun uniffi_oubli_bridge_fn_free_oubliwallet(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_constructor_oubliwallet_new(`storage`: Long,`rpcUrl`: RustBuffer.ByValue,`paymasterApiKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(`ptr`: Pointer,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_generate_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(`ptr`: Pointer,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price_usd(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Double
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_mnemonic(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_rpc_url(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_state(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(`ptr`: Pointer,`txHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_complete_onboarding(`ptr`: Pointer,`mnemonic`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_fund(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_lock(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_ragequit(`ptr`: Pointer,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_refresh_balance(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_rollover(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_send(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_start_seed_backup(`ptr`: Pointer,`mnemonic`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_transfer(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_biometric(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_verify_seed_word(`ptr`: Pointer,`promptIndex`: Int,`answer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_withdraw(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_pay_lightning(`ptr`: Pointer,`bolt11`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(`ptr`: Pointer,`contact`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_execute(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_limits(`ptr`: Pointer,`direction`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_list(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_ln_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_status(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_wbtc_to_btc(`ptr`: Pointer,`amountSats`: Long,`btcAddress`: RustBuffer.ByValue,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_update_rpc_url(`ptr`: Pointer,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_validate_mnemonic(`ptr`: Pointer,`phrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_init_callback_vtable_platformstoragecallback(`vtable`: UniffiVTableCallbackInterfacePlatformStorageCallback,
+): Unit
+fun ffi_oubli_bridge_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_oubli_bridge_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_oubli_bridge_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun ffi_oubli_bridge_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_oubli_bridge_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_u8(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_u8(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+fun ffi_oubli_bridge_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_i8(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_i8(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+fun ffi_oubli_bridge_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_u16(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_u16(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Short
+fun ffi_oubli_bridge_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_i16(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_i16(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Short
+fun ffi_oubli_bridge_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_u32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_u32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Int
+fun ffi_oubli_bridge_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_i32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_i32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Int
+fun ffi_oubli_bridge_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_u64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_u64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+fun ffi_oubli_bridge_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_i64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_i64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+fun ffi_oubli_bridge_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_f32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_f32(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Float
+fun ffi_oubli_bridge_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_f64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_f64(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Double
+fun ffi_oubli_bridge_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_pointer(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_pointer(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun ffi_oubli_bridge_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_rust_buffer(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_rust_buffer(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_oubli_bridge_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_cancel_void(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_free_void(`handle`: Long,
+): Unit
+fun ffi_oubli_bridge_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+
 }
 
-private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
+private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
     // Get the bindings contract version from our ComponentInterface
-    val bindings_contract_version = 26
+    val bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
     val scaffolding_contract_version = lib.ffi_oubli_bridge_uniffi_contract_version()
     if (bindings_contract_version != scaffolding_contract_version) {
         throw RuntimeException("UniFFI contract version mismatch: try cleaning and rebuilding your project")
     }
 }
-
 @Suppress("UNUSED_PARAMETER")
-private fun uniffiCheckApiChecksums(lib: UniffiLib) {
+private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_fee() != 48584.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1303,7 +1345,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic() != 25697.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 52574.toShort()) {
+    if (lib.uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 45245.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store() != 9671.toShort()) {
@@ -1326,6 +1368,13 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     }
 }
 
+/**
+ * @suppress
+ */
+public fun uniffiEnsureInitialized() {
+    UniffiLib.INSTANCE
+}
+
 // Async support
 
 // Public interface members begin here.
@@ -1343,8 +1392,33 @@ interface Disposable {
     fun destroy()
     companion object {
         fun destroy(vararg args: Any?) {
-            args.filterIsInstance<Disposable>()
-                .forEach(Disposable::destroy)
+            for (arg in args) {
+                when (arg) {
+                    is Disposable -> arg.destroy()
+                    is ArrayList<*> -> {
+                        for (idx in arg.indices) {
+                            val element = arg[idx]
+                            if (element is Disposable) {
+                                element.destroy()
+                            }
+                        }
+                    }
+                    is Map<*, *> -> {
+                        for (element in arg.values) {
+                            if (element is Disposable) {
+                                element.destroy()
+                            }
+                        }
+                    }
+                    is Iterable<*> -> {
+                        for (element in arg) {
+                            if (element is Disposable) {
+                                element.destroy()
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1369,7 +1443,102 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  *
  * @suppress
  * */
-object NoPointer
+object NoPointer// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+internal const val IDX_CALLBACK_FREE = 0
+// Callback return codes
+internal const val UNIFFI_CALLBACK_SUCCESS = 0
+internal const val UNIFFI_CALLBACK_ERROR = 1
+internal const val UNIFFI_CALLBACK_UNEXPECTED_ERROR = 2
+
+/**
+ * @suppress
+ */
+public abstract class FfiConverterCallbackInterface<CallbackInterface: Any>: FfiConverter<CallbackInterface, Long> {
+    internal val handleMap = UniffiHandleMap<CallbackInterface>()
+
+    internal fun drop(handle: Long) {
+        handleMap.remove(handle)
+    }
+
+    override fun lift(value: Long): CallbackInterface {
+        return handleMap.get(value)
+    }
+
+    override fun read(buf: ByteBuffer) = lift(buf.getLong())
+
+    override fun lower(value: CallbackInterface) = handleMap.insert(value)
+
+    override fun allocationSize(value: CallbackInterface) = 8UL
+
+    override fun write(value: CallbackInterface, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+/**
+ * The cleaner interface for Object finalization code to run.
+ * This is the entry point to any implementation that we're using.
+ *
+ * The cleaner registers objects and returns cleanables, so now we are
+ * defining a `UniffiCleaner` with a `UniffiClenaer.Cleanable` to abstract the
+ * different implmentations available at compile time.
+ *
+ * @suppress
+ */
+interface UniffiCleaner {
+    interface Cleanable {
+        fun clean()
+    }
+
+    fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable
+
+    companion object
+}
+
+// The fallback Jna cleaner, which is available for both Android, and the JVM.
+private class UniffiJnaCleaner : UniffiCleaner {
+    private val cleaner = com.sun.jna.internal.Cleaner.getCleaner()
+
+    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
+        UniffiJnaCleanable(cleaner.register(value, cleanUpTask))
+}
+
+private class UniffiJnaCleanable(
+    private val cleanable: com.sun.jna.internal.Cleaner.Cleanable,
+) : UniffiCleaner.Cleanable {
+    override fun clean() = cleanable.clean()
+}
+
+
+// We decide at uniffi binding generation time whether we were
+// using Android or not.
+// There are further runtime checks to chose the correct implementation
+// of the cleaner.
+private fun UniffiCleaner.Companion.create(): UniffiCleaner =
+    try {
+        // For safety's sake: if the library hasn't been run in android_cleaner = true
+        // mode, but is being run on Android, then we still need to think about
+        // Android API versions.
+        // So we check if java.lang.ref.Cleaner is there, and use that…
+        java.lang.Class.forName("java.lang.ref.Cleaner")
+        JavaLangRefCleaner()
+    } catch (e: ClassNotFoundException) {
+        // … otherwise, fallback to the JNA cleaner.
+        UniffiJnaCleaner()
+    }
+
+private class JavaLangRefCleaner : UniffiCleaner {
+    val cleaner = java.lang.ref.Cleaner.create()
+
+    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
+        JavaLangRefCleanable(cleaner.register(value, cleanUpTask))
+}
+
+private class JavaLangRefCleanable(
+    val cleanable: java.lang.ref.Cleaner.Cleanable
+) : UniffiCleaner.Cleanable {
+    override fun clean() = cleanable.clean()
+}
 
 /**
  * @suppress
@@ -1642,69 +1811,6 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 //
 
 
-/**
- * The cleaner interface for Object finalization code to run.
- * This is the entry point to any implementation that we're using.
- *
- * The cleaner registers objects and returns cleanables, so now we are
- * defining a `UniffiCleaner` with a `UniffiClenaer.Cleanable` to abstract the
- * different implmentations available at compile time.
- *
- * @suppress
- */
-interface UniffiCleaner {
-    interface Cleanable {
-        fun clean()
-    }
-
-    fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable
-
-    companion object
-}
-
-// The fallback Jna cleaner, which is available for both Android, and the JVM.
-private class UniffiJnaCleaner : UniffiCleaner {
-    private val cleaner = com.sun.jna.internal.Cleaner.getCleaner()
-
-    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
-        UniffiJnaCleanable(cleaner.register(value, cleanUpTask))
-}
-
-private class UniffiJnaCleanable(
-    private val cleanable: com.sun.jna.internal.Cleaner.Cleanable,
-) : UniffiCleaner.Cleanable {
-    override fun clean() = cleanable.clean()
-}
-
-// We decide at uniffi binding generation time whether we were
-// using Android or not.
-// There are further runtime checks to chose the correct implementation
-// of the cleaner.
-private fun UniffiCleaner.Companion.create(): UniffiCleaner =
-    try {
-        // For safety's sake: if the library hasn't been run in android_cleaner = true
-        // mode, but is being run on Android, then we still need to think about
-        // Android API versions.
-        // So we check if java.lang.ref.Cleaner is there, and use that…
-        java.lang.Class.forName("java.lang.ref.Cleaner")
-        JavaLangRefCleaner()
-    } catch (e: ClassNotFoundException) {
-        // … otherwise, fallback to the JNA cleaner.
-        UniffiJnaCleaner()
-    }
-
-private class JavaLangRefCleaner : UniffiCleaner {
-    val cleaner = java.lang.ref.Cleaner.create()
-
-    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
-        JavaLangRefCleanable(cleaner.register(value, cleanUpTask))
-}
-
-private class JavaLangRefCleanable(
-    val cleanable: java.lang.ref.Cleaner.Cleanable
-) : UniffiCleaner.Cleanable {
-    override fun clean() = cleanable.clean()
-}
 public interface OubliWalletInterface {
     
     fun `calculateFee`(`amountSats`: kotlin.String): kotlin.String
@@ -1790,7 +1896,8 @@ public interface OubliWalletInterface {
     companion object
 }
 
-open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface {
+open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
+{
 
     constructor(pointer: Pointer) {
         this.pointer = pointer
@@ -3030,38 +3137,7 @@ public interface PlatformStorageCallback {
     companion object
 }
 
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-internal const val IDX_CALLBACK_FREE = 0
-// Callback return codes
-internal const val UNIFFI_CALLBACK_SUCCESS = 0
-internal const val UNIFFI_CALLBACK_ERROR = 1
-internal const val UNIFFI_CALLBACK_UNEXPECTED_ERROR = 2
 
-/**
- * @suppress
- */
-public abstract class FfiConverterCallbackInterface<CallbackInterface: Any>: FfiConverter<CallbackInterface, Long> {
-    internal val handleMap = UniffiHandleMap<CallbackInterface>()
-
-    internal fun drop(handle: Long) {
-        handleMap.remove(handle)
-    }
-
-    override fun lift(value: Long): CallbackInterface {
-        return handleMap.get(value)
-    }
-
-    override fun read(buf: ByteBuffer) = lift(buf.getLong())
-
-    override fun lower(value: CallbackInterface) = handleMap.insert(value)
-
-    override fun allocationSize(value: CallbackInterface) = 8UL
-
-    override fun write(value: CallbackInterface, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
 
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfacePlatformStorageCallback {

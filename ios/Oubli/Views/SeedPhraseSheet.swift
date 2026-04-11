@@ -164,7 +164,7 @@ struct SeedPhraseSheet: View {
             case .success(let mnemonic):
                 seedWords = mnemonic.split(separator: " ").map(String.init)
             case .failure(let err):
-                error = err.localizedDescription
+                error = viewModel.userFacingMessage(for: err, context: .seedReveal)
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }

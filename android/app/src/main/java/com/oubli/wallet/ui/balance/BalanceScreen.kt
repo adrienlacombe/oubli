@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
+import com.oubli.wallet.ui.util.SupportIssue
 import uniffi.oubli.ActivityEventFfi
 import uniffi.oubli.ContactFfi
 
@@ -97,7 +98,7 @@ onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
     onDeleteContact: (String) -> Unit = {},
     satsToFiatRaw: (String) -> String? = { null },
     fiatToSats: (String) -> String? = { null },
-    autoFundError: String? = null,
+    autoFundIssue: SupportIssue? = null,
     isRefreshing: Boolean = false,
     activityContactNames: Map<String, String> = emptyMap(),
     onShowMessage: (String) -> Unit = {},
@@ -274,7 +275,7 @@ onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
         // Activity section
         ActivityList(
             activity = activity,
-            autoFundError = autoFundError,
+            autoFundIssue = autoFundIssue,
             contactNames = activityContactNames,
             balanceSats = balanceSats,
             onShowMessage = onShowMessage,

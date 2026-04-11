@@ -281,7 +281,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureInitialized()
+    uniffiEnsureOubliBridgeInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -352,9 +352,10 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-fileprivate class UniffiHandleMap<T> {
-    private var map: [UInt64: T] = [:]
+fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
+    // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
+    private var map: [UInt64: T] = [:]
     private var currentHandle: UInt64 = 1
 
     func insert(obj: T) -> UInt64 {
@@ -394,7 +395,13 @@ fileprivate class UniffiHandleMap<T> {
 
 
 // Public interface members begin here.
-
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -528,7 +535,7 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 
-public protocol OubliWalletProtocol : AnyObject {
+public protocol OubliWalletProtocol: AnyObject, Sendable {
     
     func calculateFee(amountSats: String)  -> String
     
@@ -611,9 +618,7 @@ public protocol OubliWalletProtocol : AnyObject {
     func validateMnemonic(phrase: String) throws 
     
 }
-
-open class OubliWallet:
-    OubliWalletProtocol {
+open class OubliWallet: OubliWalletProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -627,6 +632,9 @@ open class OubliWallet:
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -651,9 +659,9 @@ open class OubliWallet:
     }
 public convenience init(storage: PlatformStorageCallback, rpcUrl: String?, paymasterApiKey: String?)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeOubliError.lift) {
+        try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_constructor_oubliwallet_new(
-        FfiConverterCallbackInterfacePlatformStorageCallback.lower(storage),
+        FfiConverterCallbackInterfacePlatformStorageCallback_lower(storage),
         FfiConverterOptionString.lower(rpcUrl),
         FfiConverterOptionString.lower(paymasterApiKey),$0
     )
@@ -672,7 +680,7 @@ public convenience init(storage: PlatformStorageCallback, rpcUrl: String?, payma
     
 
     
-open func calculateFee(amountSats: String) -> String {
+open func calculateFee(amountSats: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),$0
@@ -680,7 +688,7 @@ open func calculateFee(amountSats: String) -> String {
 })
 }
     
-open func calculateSendFee(amountSats: String, recipient: String) -> String {
+open func calculateSendFee(amountSats: String, recipient: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),
@@ -689,14 +697,14 @@ open func calculateSendFee(amountSats: String, recipient: String) -> String {
 })
 }
     
-open func deleteContact(contactId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func deleteContact(contactId: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(self.uniffiClonePointer(),
         FfiConverterString.lower(contactId),$0
     )
 }
 }
     
-open func findContactByAddress(address: String) -> ContactFfi? {
+open func findContactByAddress(address: String) -> ContactFfi?  {
     return try!  FfiConverterOptionTypeContactFFI.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(self.uniffiClonePointer(),
         FfiConverterString.lower(address),$0
@@ -704,21 +712,21 @@ open func findContactByAddress(address: String) -> ContactFfi? {
 })
 }
     
-open func generateMnemonic()throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func generateMnemonic()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_generate_mnemonic(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getActivity()throws  -> [ActivityEventFfi] {
-    return try  FfiConverterSequenceTypeActivityEventFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func getActivity()throws  -> [ActivityEventFfi]  {
+    return try  FfiConverterSequenceTypeActivityEventFFI.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_activity(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getBtcPrice(currency: String) -> Double? {
+open func getBtcPrice(currency: String) -> Double?  {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price(self.uniffiClonePointer(),
         FfiConverterString.lower(currency),$0
@@ -726,56 +734,56 @@ open func getBtcPrice(currency: String) -> Double? {
 })
 }
     
-open func getBtcPriceUsd() -> Double? {
+open func getBtcPriceUsd() -> Double?  {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_btc_price_usd(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getCachedActivity() -> [ActivityEventFfi] {
+open func getCachedActivity() -> [ActivityEventFfi]  {
     return try!  FfiConverterSequenceTypeActivityEventFFI.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_cached_activity(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getContacts() -> [ContactFfi] {
+open func getContacts() -> [ContactFfi]  {
     return try!  FfiConverterSequenceTypeContactFFI.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_contacts(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getFeePercent() -> Double {
+open func getFeePercent() -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_fee_percent(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getMnemonic()throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func getMnemonic()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_mnemonic(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getRpcUrl() -> String {
+open func getRpcUrl() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_rpc_url(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getState() -> WalletStateInfo {
-    return try!  FfiConverterTypeWalletStateInfo.lift(try! rustCall() {
+open func getState() -> WalletStateInfo  {
+    return try!  FfiConverterTypeWalletStateInfo_lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_state(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getTransferRecipient(txHash: String) -> String? {
+open func getTransferRecipient(txHash: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_get_transfer_recipient(self.uniffiClonePointer(),
         FfiConverterString.lower(txHash),$0
@@ -783,50 +791,50 @@ open func getTransferRecipient(txHash: String) -> String? {
 })
 }
     
-open func handleCompleteOnboarding(mnemonic: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleCompleteOnboarding(mnemonic: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_complete_onboarding(self.uniffiClonePointer(),
         FfiConverterString.lower(mnemonic),$0
     )
 }
 }
     
-open func handleFund(amountSats: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleFund(amountSats: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_fund(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),$0
     )
 })
 }
     
-open func handleLock()throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleLock()throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_lock(self.uniffiClonePointer(),$0
     )
 }
 }
     
-open func handleRagequit(recipient: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleRagequit(recipient: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_ragequit(self.uniffiClonePointer(),
         FfiConverterString.lower(recipient),$0
     )
 })
 }
     
-open func handleRefreshBalance()throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleRefreshBalance()throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_refresh_balance(self.uniffiClonePointer(),$0
     )
 }
 }
     
-open func handleRollover()throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleRollover()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_rollover(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func handleSend(amountSats: String, recipient: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleSend(amountSats: String, recipient: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_send(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),
         FfiConverterString.lower(recipient),$0
@@ -834,16 +842,16 @@ open func handleSend(amountSats: String, recipient: String)throws  -> String {
 })
 }
     
-open func handleStartSeedBackup(mnemonic: String)throws  -> SeedBackupStateFfi {
-    return try  FfiConverterTypeSeedBackupStateFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleStartSeedBackup(mnemonic: String)throws  -> SeedBackupStateFfi  {
+    return try  FfiConverterTypeSeedBackupStateFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_start_seed_backup(self.uniffiClonePointer(),
         FfiConverterString.lower(mnemonic),$0
     )
 })
 }
     
-open func handleTransfer(amountSats: String, recipient: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleTransfer(amountSats: String, recipient: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_transfer(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),
         FfiConverterString.lower(recipient),$0
@@ -851,14 +859,14 @@ open func handleTransfer(amountSats: String, recipient: String)throws  -> String
 })
 }
     
-open func handleUnlockBiometric()throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleUnlockBiometric()throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_biometric(self.uniffiClonePointer(),$0
     )
 }
 }
     
-open func handleVerifySeedWord(promptIndex: UInt32, answer: String)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleVerifySeedWord(promptIndex: UInt32, answer: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_verify_seed_word(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(promptIndex),
         FfiConverterString.lower(answer),$0
@@ -866,8 +874,8 @@ open func handleVerifySeedWord(promptIndex: UInt32, answer: String)throws  -> Bo
 })
 }
     
-open func handleWithdraw(amountSats: String, recipient: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func handleWithdraw(amountSats: String, recipient: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_handle_withdraw(self.uniffiClonePointer(),
         FfiConverterString.lower(amountSats),
         FfiConverterString.lower(recipient),$0
@@ -875,31 +883,31 @@ open func handleWithdraw(amountSats: String, recipient: String)throws  -> String
 })
 }
     
-open func payLightning(bolt11: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func payLightning(bolt11: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_pay_lightning(self.uniffiClonePointer(),
         FfiConverterString.lower(bolt11),$0
     )
 })
 }
     
-open func receiveLightningWait(swapId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func receiveLightningWait(swapId: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(self.uniffiClonePointer(),
         FfiConverterString.lower(swapId),$0
     )
 }
 }
     
-open func saveContact(contact: ContactFfi)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func saveContact(contact: ContactFfi)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(self.uniffiClonePointer(),
-        FfiConverterTypeContactFFI.lower(contact),$0
+        FfiConverterTypeContactFFI_lower(contact),$0
     )
 })
 }
     
-open func swapBtcToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi {
-    return try  FfiConverterTypeSwapQuoteFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapBtcToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi  {
+    return try  FfiConverterTypeSwapQuoteFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(self.uniffiClonePointer(),
         FfiConverterUInt64.lower(amountSats),
         FfiConverterBool.lower(exactIn),$0
@@ -907,30 +915,30 @@ open func swapBtcToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFf
 })
 }
     
-open func swapExecute(swapId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapExecute(swapId: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_execute(self.uniffiClonePointer(),
         FfiConverterString.lower(swapId),$0
     )
 }
 }
     
-open func swapLimits(direction: String)throws  -> SwapLimitsFfi {
-    return try  FfiConverterTypeSwapLimitsFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapLimits(direction: String)throws  -> SwapLimitsFfi  {
+    return try  FfiConverterTypeSwapLimitsFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_limits(self.uniffiClonePointer(),
         FfiConverterString.lower(direction),$0
     )
 })
 }
     
-open func swapList()throws  -> [SwapSummaryFfi] {
-    return try  FfiConverterSequenceTypeSwapSummaryFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapList()throws  -> [SwapSummaryFfi]  {
+    return try  FfiConverterSequenceTypeSwapSummaryFFI.lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_list(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func swapLnToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi {
-    return try  FfiConverterTypeSwapQuoteFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapLnToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi  {
+    return try  FfiConverterTypeSwapQuoteFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_ln_to_wbtc(self.uniffiClonePointer(),
         FfiConverterUInt64.lower(amountSats),
         FfiConverterBool.lower(exactIn),$0
@@ -938,16 +946,16 @@ open func swapLnToWbtc(amountSats: UInt64, exactIn: Bool)throws  -> SwapQuoteFfi
 })
 }
     
-open func swapStatus(swapId: String)throws  -> SwapStatusFfi {
-    return try  FfiConverterTypeSwapStatusFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapStatus(swapId: String)throws  -> SwapStatusFfi  {
+    return try  FfiConverterTypeSwapStatusFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_status(self.uniffiClonePointer(),
         FfiConverterString.lower(swapId),$0
     )
 })
 }
     
-open func swapWbtcToBtc(amountSats: UInt64, btcAddress: String, exactIn: Bool)throws  -> SwapQuoteFfi {
-    return try  FfiConverterTypeSwapQuoteFFI.lift(try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func swapWbtcToBtc(amountSats: UInt64, btcAddress: String, exactIn: Bool)throws  -> SwapQuoteFfi  {
+    return try  FfiConverterTypeSwapQuoteFFI_lift(try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_swap_wbtc_to_btc(self.uniffiClonePointer(),
         FfiConverterUInt64.lower(amountSats),
         FfiConverterString.lower(btcAddress),
@@ -956,21 +964,21 @@ open func swapWbtcToBtc(amountSats: UInt64, btcAddress: String, exactIn: Bool)th
 })
 }
     
-open func updateContactLastUsed(contactId: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func updateContactLastUsed(contactId: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(self.uniffiClonePointer(),
         FfiConverterString.lower(contactId),$0
     )
 }
 }
     
-open func updateRpcUrl(url: String) {try! rustCall() {
+open func updateRpcUrl(url: String)  {try! rustCall() {
     uniffi_oubli_bridge_fn_method_oubliwallet_update_rpc_url(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
     )
 }
 }
     
-open func validateMnemonic(phrase: String)throws  {try rustCallWithError(FfiConverterTypeOubliError.lift) {
+open func validateMnemonic(phrase: String)throws   {try rustCallWithError(FfiConverterTypeOubliError_lift) {
     uniffi_oubli_bridge_fn_method_oubliwallet_validate_mnemonic(self.uniffiClonePointer(),
         FfiConverterString.lower(phrase),$0
     )
@@ -979,6 +987,7 @@ open func validateMnemonic(phrase: String)throws  {try rustCallWithError(FfiConv
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1015,8 +1024,6 @@ public struct FfiConverterTypeOubliWallet: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1030,6 +1037,8 @@ public func FfiConverterTypeOubliWallet_lift(_ pointer: UnsafeMutableRawPointer)
 public func FfiConverterTypeOubliWallet_lower(_ value: OubliWallet) -> UnsafeMutableRawPointer {
     return FfiConverterTypeOubliWallet.lower(value)
 }
+
+
 
 
 public struct ActivityEventFfi {
@@ -1054,6 +1063,9 @@ public struct ActivityEventFfi {
     }
 }
 
+#if compiler(>=6)
+extension ActivityEventFfi: Sendable {}
+#endif
 
 
 extension ActivityEventFfi: Equatable, Hashable {
@@ -1092,6 +1104,7 @@ extension ActivityEventFfi: Equatable, Hashable {
         hasher.combine(explorerUrl)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1152,6 +1165,9 @@ public struct ContactAddressFfi {
     }
 }
 
+#if compiler(>=6)
+extension ContactAddressFfi: Sendable {}
+#endif
 
 
 extension ContactAddressFfi: Equatable, Hashable {
@@ -1174,6 +1190,7 @@ extension ContactAddressFfi: Equatable, Hashable {
         hasher.combine(label)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1232,6 +1249,9 @@ public struct ContactFfi {
     }
 }
 
+#if compiler(>=6)
+extension ContactFfi: Sendable {}
+#endif
 
 
 extension ContactFfi: Equatable, Hashable {
@@ -1266,6 +1286,7 @@ extension ContactFfi: Equatable, Hashable {
         hasher.combine(lastUsedAt)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1322,6 +1343,9 @@ public struct SeedBackupStateFfi {
     }
 }
 
+#if compiler(>=6)
+extension SeedBackupStateFfi: Sendable {}
+#endif
 
 
 extension SeedBackupStateFfi: Equatable, Hashable {
@@ -1340,6 +1364,7 @@ extension SeedBackupStateFfi: Equatable, Hashable {
         hasher.combine(prompts)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1392,6 +1417,9 @@ public struct SwapLimitsFfi {
     }
 }
 
+#if compiler(>=6)
+extension SwapLimitsFfi: Sendable {}
+#endif
 
 
 extension SwapLimitsFfi: Equatable, Hashable {
@@ -1418,6 +1446,7 @@ extension SwapLimitsFfi: Equatable, Hashable {
         hasher.combine(outputMax)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1480,6 +1509,9 @@ public struct SwapQuoteFfi {
     }
 }
 
+#if compiler(>=6)
+extension SwapQuoteFfi: Sendable {}
+#endif
 
 
 extension SwapQuoteFfi: Equatable, Hashable {
@@ -1518,6 +1550,7 @@ extension SwapQuoteFfi: Equatable, Hashable {
         hasher.combine(lnInvoice)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1578,6 +1611,9 @@ public struct SwapStatusFfi {
     }
 }
 
+#if compiler(>=6)
+extension SwapStatusFfi: Sendable {}
+#endif
 
 
 extension SwapStatusFfi: Equatable, Hashable {
@@ -1600,6 +1636,7 @@ extension SwapStatusFfi: Equatable, Hashable {
         hasher.combine(txId)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1654,6 +1691,9 @@ public struct SwapSummaryFfi {
     }
 }
 
+#if compiler(>=6)
+extension SwapSummaryFfi: Sendable {}
+#endif
 
 
 extension SwapSummaryFfi: Equatable, Hashable {
@@ -1680,6 +1720,7 @@ extension SwapSummaryFfi: Equatable, Hashable {
         hasher.combine(outputAmount)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1730,6 +1771,9 @@ public struct VerificationPromptFfi {
     }
 }
 
+#if compiler(>=6)
+extension VerificationPromptFfi: Sendable {}
+#endif
 
 
 extension VerificationPromptFfi: Equatable, Hashable {
@@ -1744,6 +1788,7 @@ extension VerificationPromptFfi: Equatable, Hashable {
         hasher.combine(wordNumber)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1802,6 +1847,9 @@ public struct WalletStateInfo {
     }
 }
 
+#if compiler(>=6)
+extension WalletStateInfo: Sendable {}
+#endif
 
 
 extension WalletStateInfo: Equatable, Hashable {
@@ -1844,6 +1892,7 @@ extension WalletStateInfo: Equatable, Hashable {
         hasher.combine(autoFundError)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -1901,6 +1950,10 @@ public enum AddressTypeFfi {
 }
 
 
+#if compiler(>=6)
+extension AddressTypeFfi: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1950,13 +2003,15 @@ public func FfiConverterTypeAddressTypeFFI_lower(_ value: AddressTypeFfi) -> Rus
 }
 
 
-
 extension AddressTypeFfi: Equatable, Hashable {}
 
 
 
 
-public enum OubliError {
+
+
+
+public enum OubliError: Swift.Error {
 
     
     
@@ -2082,13 +2137,34 @@ public struct FfiConverterTypeOubliError: FfiConverterRustBuffer {
 }
 
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOubliError_lift(_ buf: RustBuffer) throws -> OubliError {
+    return try FfiConverterTypeOubliError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOubliError_lower(_ value: OubliError) -> RustBuffer {
+    return FfiConverterTypeOubliError.lower(value)
+}
+
+
 extension OubliError: Equatable, Hashable {}
+
+
+
 
 extension OubliError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
+
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -2104,6 +2180,10 @@ public enum WalletStateFfi {
     case wiped
 }
 
+
+#if compiler(>=6)
+extension WalletStateFfi: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2184,7 +2264,6 @@ public func FfiConverterTypeWalletStateFFI_lower(_ value: WalletStateFfi) -> Rus
 }
 
 
-
 extension WalletStateFfi: Equatable, Hashable {}
 
 
@@ -2192,7 +2271,10 @@ extension WalletStateFfi: Equatable, Hashable {}
 
 
 
-public protocol PlatformStorageCallback : AnyObject {
+
+
+
+public protocol PlatformStorageCallback: AnyObject, Sendable {
     
     func secureStore(key: String, value: [UInt8]) throws 
     
@@ -2208,20 +2290,16 @@ public protocol PlatformStorageCallback : AnyObject {
     
 }
 
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfacePlatformStorageCallback = UniffiVTableCallbackInterfacePlatformStorageCallback(
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfacePlatformStorageCallback] = [UniffiVTableCallbackInterfacePlatformStorageCallback(
         secureStore: { (
             uniffiHandle: UInt64,
             key: RustBuffer,
@@ -2246,7 +2324,7 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeOubliError.lower
+                lowerError: FfiConverterTypeOubliError_lower
             )
         },
         secureLoad: { (
@@ -2271,7 +2349,7 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeOubliError.lower
+                lowerError: FfiConverterTypeOubliError_lower
             )
         },
         secureDelete: { (
@@ -2296,7 +2374,7 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeOubliError.lower
+                lowerError: FfiConverterTypeOubliError_lower
             )
         },
         requestBiometric: { (
@@ -2321,7 +2399,7 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeOubliError.lower
+                lowerError: FfiConverterTypeOubliError_lower
             )
         },
         biometricAvailable: { (
@@ -2366,7 +2444,7 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeOubliError.lower
+                lowerError: FfiConverterTypeOubliError_lower
             )
         },
         uniffiFree: { (uniffiHandle: UInt64) -> () in
@@ -2375,11 +2453,11 @@ fileprivate struct UniffiCallbackInterfacePlatformStorageCallback {
                 print("Uniffi callback interface PlatformStorageCallback: handle missing in uniffiFree")
             }
         }
-    )
+    )]
 }
 
 private func uniffiCallbackInitPlatformStorageCallback() {
-    uniffi_oubli_bridge_fn_init_callback_vtable_platformstoragecallback(&UniffiCallbackInterfacePlatformStorageCallback.vtable)
+    uniffi_oubli_bridge_fn_init_callback_vtable_platformstoragecallback(UniffiCallbackInterfacePlatformStorageCallback.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2387,7 +2465,7 @@ private func uniffiCallbackInitPlatformStorageCallback() {
 @_documentation(visibility: private)
 #endif
 fileprivate struct FfiConverterCallbackInterfacePlatformStorageCallback {
-    fileprivate static var handleMap = UniffiHandleMap<PlatformStorageCallback>()
+    fileprivate static let handleMap = UniffiHandleMap<PlatformStorageCallback>()
 }
 
 #if swift(>=5.8)
@@ -2425,6 +2503,21 @@ extension FfiConverterCallbackInterfacePlatformStorageCallback : FfiConverter {
     public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
         writeInt(&buf, lower(v))
     }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfacePlatformStorageCallback_lift(_ handle: UInt64) throws -> PlatformStorageCallback {
+    return try FfiConverterCallbackInterfacePlatformStorageCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfacePlatformStorageCallback_lower(_ v: PlatformStorageCallback) -> UInt64 {
+    return FfiConverterCallbackInterfacePlatformStorageCallback.lower(v)
 }
 
 #if swift(>=5.8)
@@ -2754,9 +2847,9 @@ private enum InitializationResult {
 }
 // Use a global variable to perform the versioning checks. Swift ensures that
 // the code inside is only computed once.
-private var initializationResult: InitializationResult = {
+private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 26
+    let bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_oubli_bridge_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
@@ -2882,7 +2975,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic() != 25697) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 52574) {
+    if (uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 45245) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store() != 9671) {
@@ -2908,7 +3001,9 @@ private var initializationResult: InitializationResult = {
     return InitializationResult.ok
 }()
 
-private func uniffiEnsureInitialized() {
+// Make the ensure init function public so that other modules which have external type references to
+// our types can call it.
+public func uniffiEnsureOubliBridgeInitialized() {
     switch initializationResult {
     case .ok:
         break

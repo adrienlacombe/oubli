@@ -61,13 +61,21 @@ impl PersistentSwapStorage {
             Ok(Some(bytes)) => match serde_json::from_slice(&bytes) {
                 Ok(map) => map,
                 Err(e) => {
-                    eprintln!("[oubli] swap storage: decode failed: {e}");
+                    crate::warn_event!(
+                        "wallet.swap_storage",
+                        "decode_failed",
+                        "error_kind" = crate::telemetry::error_kind(&e)
+                    );
                     HashMap::new()
                 }
             },
             Ok(None) => HashMap::new(),
             Err(e) => {
-                eprintln!("[oubli] swap storage: load failed: {e}");
+                crate::warn_event!(
+                    "wallet.swap_storage",
+                    "load_failed",
+                    "error_kind" = crate::telemetry::error_kind(&e)
+                );
                 HashMap::new()
             }
         }
@@ -76,7 +84,11 @@ impl PersistentSwapStorage {
     fn store_map(&self, map: &HashMap<String, String>) {
         if map.is_empty() {
             if let Err(e) = self.storage.secure_delete(&self.storage_key) {
-                eprintln!("[oubli] swap storage: delete failed: {e}");
+                crate::warn_event!(
+                    "wallet.swap_storage",
+                    "delete_failed",
+                    "error_kind" = crate::telemetry::error_kind(&e)
+                );
             }
             return;
         }
@@ -84,10 +96,18 @@ impl PersistentSwapStorage {
         match serde_json::to_vec(map) {
             Ok(bytes) => {
                 if let Err(e) = self.storage.secure_store(&self.storage_key, &bytes) {
-                    eprintln!("[oubli] swap storage: store failed: {e}");
+                    crate::warn_event!(
+                        "wallet.swap_storage",
+                        "store_failed",
+                        "error_kind" = crate::telemetry::error_kind(&e)
+                    );
                 }
             }
-            Err(e) => eprintln!("[oubli] swap storage: encode failed: {e}"),
+            Err(e) => crate::warn_event!(
+                "wallet.swap_storage",
+                "encode_failed",
+                "error_kind" = crate::telemetry::error_kind(&e)
+            ),
         }
     }
 }

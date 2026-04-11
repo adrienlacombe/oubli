@@ -315,7 +315,12 @@ impl JsRuntime {
                     .set(
                         "__oubli_log",
                         Func::from(|level: String, message: String| {
-                            eprintln!("[atomiq-js:{}] {}", level, message);
+                            crate::swap_debug_event!(
+                                "swap.runtime.js",
+                                "message",
+                                "level" = level,
+                                "message" = message
+                            );
                         }),
                     )
                     .unwrap();
@@ -337,11 +342,11 @@ impl JsRuntime {
         }
 
         let runtime = Self { _rt: rt, ctx };
-        eprintln!("[oubli-swap] Installing polyfills...");
+        crate::swap_debug_event!("swap.runtime", "install_polyfills_started");
         runtime.install_polyfills().await?;
-        eprintln!("[oubli-swap] Polyfills installed. Loading bundle...");
+        crate::swap_debug_event!("swap.runtime", "polyfills_ready");
         runtime.load_bundle().await?;
-        eprintln!("[oubli-swap] Bundle loaded. Calling init...");
+        crate::swap_debug_event!("swap.runtime", "bundle_loaded");
         Ok(runtime)
     }
 

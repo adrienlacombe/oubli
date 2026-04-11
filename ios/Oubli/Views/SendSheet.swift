@@ -462,7 +462,7 @@ struct SendSheet: View {
                 swapState = .success("Tx: \(short)")
                 onSent?(txHash)
             } else {
-                let errorMsg = viewModel.stateInfo.errorMessage ?? "Send failed"
+                let errorMsg = viewModel.errorMessage ?? "Send failed. Check the amount and recipient, then try again."
                 swapState = .error(errorMsg)
             }
         }
@@ -477,7 +477,7 @@ struct SendSheet: View {
                     : hash
                 swapState = .success("Tx: \(short)")
             } else {
-                let errorMsg = viewModel.stateInfo.errorMessage ?? "Unknown error"
+                let errorMsg = viewModel.errorMessage ?? "Something went wrong. Try again."
                 swapState = .error(errorMsg)
             }
         }

@@ -391,7 +391,7 @@ struct ReceiveSheet: View {
                     waitForLnPayment(swapId: swapId)
                 }
             case .failure(let error):
-                lnError = error.localizedDescription
+                lnError = viewModel.userFacingMessage(for: error, context: .lightningReceive)
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
@@ -432,7 +432,7 @@ struct ReceiveSheet: View {
                 lnSuccess = true
                 viewModel.refreshBalance()
             case .failure(let error):
-                lnError = error.localizedDescription
+                lnError = viewModel.userFacingMessage(for: error, context: .lightningReceive)
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
