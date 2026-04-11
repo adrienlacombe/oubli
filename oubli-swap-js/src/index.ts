@@ -303,16 +303,35 @@ async function createLnToWbtcSwap(amountSats: string, exactIn: boolean): Promise
       expiry = Math.floor(Date.now() / 1000) + 600;
     }
 
+    const inputAmountRaw = swap.getInput().amount;
+    const outputAmountRaw = swap.getOutput().amount;
+    const inputStr = inputAmountRaw.toString();
+    const outputStr = outputAmountRaw.toString();
+    const sdkFee = swap.getFee?.()?.totalInSrcToken?.amount?.toString();
+
+    // Compute fee as input - output (both in sats) when SDK doesn't report it.
+    // Amounts may be BigNumber objects, so convert to BigInt via string for safe subtraction.
+    let feeStr = sdkFee ?? "0";
+    if (feeStr === "0" || feeStr === "undefined") {
+      try {
+        const inBig = BigInt(inputStr);
+        const outBig = BigInt(outputStr);
+        feeStr = inBig > outBig ? (inBig - outBig).toString() : "0";
+      } catch (_) {
+        feeStr = "0";
+      }
+    }
+
     const quote: SwapQuote = {
       swapId,
-      inputAmount: swap.getInput().amount.toString(),
-      outputAmount: swap.getOutput().amount.toString(),
-      fee: swap.getFee?.().totalInSrcToken?.amount?.toString() ?? "0",
+      inputAmount: inputStr,
+      outputAmount: outputStr,
+      fee: feeStr,
       expiry,
       lnInvoice,
     };
 
-    __oubli_log("info", `BTCLN→WBTC swap created: ${quote.swapId}, rawExpiry=${rawExpiry}, expiry=${expiry}, invoice=${quote.lnInvoice?.substring(0, 30)}...`);
+    __oubli_log("info", `BTCLN→WBTC swap created: ${quote.swapId}, input=${inputStr}, output=${outputStr}, fee=${feeStr}, rawExpiry=${rawExpiry}, expiry=${expiry}`);
     return JSON.stringify({ ok: true, quote });
   } catch (e: any) {
     __oubli_log("error", `createLnToWbtcSwap failed: ${e.message ?? e}`);

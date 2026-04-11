@@ -4,11 +4,8 @@
 import {
   Account,
   Provider,
-  CallData,
   hash,
   ec,
-  constants,
-  typedData as typedDataModule,
   type Call,
   type InvokeFunctionResponse,
   type UniversalDetails,
@@ -19,6 +16,10 @@ import {
 declare function __oubli_starknet_address(): string;
 declare function __oubli_starknet_public_key(): string;
 declare function __oubli_starknet_sign(hash: string): Promise<{ r: string; s: string }>;
+declare function __oubli_paymaster_sign_invoke(
+  typedDataJson: string,
+  expectedCallsJson: string,
+): Promise<{ r: string; s: string }>;
 declare function __oubli_starknet_chain_id(): string;
 declare function __oubli_account_class_hash(): string;
 declare function __oubli_paymaster_url(): string;
@@ -169,13 +170,13 @@ export class OubliStarknetAccount extends Account {
       throw new Error("Paymaster: missing typed_data in build response");
     }
 
-    // 3. Compute SNIP-12 message hash
-    const msgHash = typedDataModule.getMessageHash(td, address);
+    // 3. Validate against the locally intended calls and sign in Rust.
+    const sig = await __oubli_paymaster_sign_invoke(
+      JSON.stringify(td),
+      JSON.stringify(paymasterCalls),
+    );
 
-    // 4. Sign with Rust
-    const sig = await __oubli_starknet_sign(msgHash);
-
-    // 5. Execute via paymaster
+    // 4. Execute via paymaster
     const execResult = await paymasterRpc("paymaster_executeTransaction", {
       transaction: {
         type: "invoke",

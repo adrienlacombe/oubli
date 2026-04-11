@@ -728,8 +728,15 @@ impl OubliWallet {
     }
 
     pub fn get_mnemonic(&self) -> Result<String, OubliError> {
-        let core = self.core.lock().unwrap();
-        core.get_mnemonic().map_err(OubliError::from)
+        // Retry with short sleeps to avoid blocking indefinitely if the core
+        // mutex is held by the background deploy/poll thread.
+        for _ in 0..10 {
+            if let Ok(core) = self.core.try_lock() {
+                return core.get_mnemonic().map_err(OubliError::from);
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        Err(OubliError::InvalidState)
     }
 
     pub fn get_btc_price_usd(&self) -> Option<f64> {

@@ -19,6 +19,8 @@ use crate::signing::sign_message_hash;
 /// Signer callback that uses a Starknet private key to sign message hashes.
 /// The private key is cloned from `ActiveAccount` at swap engine init time.
 struct WalletSignerCallback {
+    address: Felt,
+    chain_id: String,
     private_key: Felt,
 }
 
@@ -32,6 +34,28 @@ impl StarknetSignerCallback for WalletSignerCallback {
             sign_message_hash(&hash, &self.private_key).map_err(|e| format!("sign failed: {e}"))?;
 
         // Return as 0x-prefixed hex
+        Ok((format!("{:#066x}", r), format!("{:#066x}", s)))
+    }
+
+    fn sign_paymaster_invoke(
+        &self,
+        typed_data_json: &str,
+        expected_calls_json: &str,
+    ) -> Result<(String, String), String> {
+        let typed_data: serde_json::Value =
+            serde_json::from_str(typed_data_json).map_err(|e| format!("parse typed_data: {e}"))?;
+        let expected_calls: Vec<serde_json::Value> = serde_json::from_str(expected_calls_json)
+            .map_err(|e| format!("parse expected calls: {e}"))?;
+
+        let (r, s) = crate::signing::sign_validated_paymaster_invoke(
+            &typed_data,
+            &expected_calls,
+            &self.address,
+            &self.chain_id,
+            &self.private_key,
+        )
+        .map_err(|e| format!("sign paymaster invoke failed: {e}"))?;
+
         Ok((format!("{:#066x}", r), format!("{:#066x}", s)))
     }
 }
@@ -157,6 +181,8 @@ pub(crate) async fn create_swap_engine(
     };
 
     let signer: Arc<dyn StarknetSignerCallback> = Arc::new(WalletSignerCallback {
+        address: *starknet_address,
+        chain_id: chain_id.to_string(),
         private_key: *starknet_private_key,
     });
 

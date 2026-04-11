@@ -228,11 +228,10 @@ class WalletViewModel @Inject constructor(
         if (shouldPoll && activityPollingJob == null) {
             refreshBtcPrice()
             loadContacts()
-            // Eagerly deploy account + init swap engine in background so
-            // Lightning receive is fast when the user opens it.
+            // Eagerly deploy account in background so Lightning receive
+            // doesn't block on deployment when the user opens it.
             viewModelScope.launch(ioDispatcher) {
                 try { repository.ensureDeployed() } catch (_: Exception) {}
-                try { repository.ensureSwapEngine() } catch (_: Exception) {}
             }
             activityPollingJob = viewModelScope.launch(ioDispatcher) {
                 var knownTxHashes = emptySet<String>()
@@ -727,13 +726,19 @@ class WalletViewModel @Inject constructor(
                     )
                 )
             } else {
-                setLightningReceiveState(
-                    current.copy(
-                        isCreating = false,
-                        isWaiting = false,
-                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to confirm Lightning payment",
+                val errMsg = result.exceptionOrNull()?.message ?: ""
+                val isExpiry = errMsg.contains("expired", ignoreCase = true)
+                        || errMsg.contains("timeout", ignoreCase = true)
+                // Suppress expiry errors — the UI countdown already handles this
+                if (!isExpiry) {
+                    setLightningReceiveState(
+                        current.copy(
+                            isCreating = false,
+                            isWaiting = false,
+                            errorMessage = errMsg.ifEmpty { "Failed to confirm Lightning payment" },
+                        )
                     )
-                )
+                }
             }
         }
     }

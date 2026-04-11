@@ -35,6 +35,14 @@ pub trait StarknetSignerCallback: Send + Sync + 'static {
     /// Sign a message hash with the Starknet private key.
     /// Returns (r, s) as hex strings.
     fn sign(&self, message_hash: &str) -> std::result::Result<(String, String), String>;
+
+    /// Validate a paymaster OutsideExecution payload against the locally intended
+    /// calls, then sign the resulting message hash.
+    fn sign_paymaster_invoke(
+        &self,
+        typed_data_json: &str,
+        expected_calls_json: &str,
+    ) -> std::result::Result<(String, String), String>;
 }
 
 /// Simple key-value storage for swap state persistence.
@@ -173,6 +181,36 @@ impl JsRuntime {
                                 }
                             }
                         })),
+                    )
+                    .unwrap();
+
+                let signer_clone = signer_for_init.clone();
+                globals
+                    .set(
+                        "__oubli_paymaster_sign_invoke",
+                        Func::from(Async(
+                            move |typed_data_json: String, expected_calls_json: String| {
+                                let signer = signer_clone.clone();
+                                async move {
+                                    match signer.sign_paymaster_invoke(
+                                        &typed_data_json,
+                                        &expected_calls_json,
+                                    ) {
+                                        Ok((r, s)) => {
+                                            let mut m = HashMap::new();
+                                            m.insert("r".to_string(), r);
+                                            m.insert("s".to_string(), s);
+                                            Ok::<_, rquickjs::Error>(m)
+                                        }
+                                        Err(e) => Err(rquickjs::Error::new_from_js_message(
+                                            "signPaymasterInvoke",
+                                            "failed",
+                                            &e,
+                                        )),
+                                    }
+                                }
+                            },
+                        )),
                     )
                     .unwrap();
 

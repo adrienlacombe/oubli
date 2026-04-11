@@ -5,6 +5,13 @@ use crate::error::WalletError;
 // Re-export the starknet-rs TypedData for use in submitter.rs
 pub use krusty_kms_client::starknet_rust::core::types::typed_data::TypedData;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CanonicalCall {
+    to: Felt,
+    selector: Felt,
+    calldata: Vec<Felt>,
+}
+
 // ── SNIP-12 message hash ─────────────────────────────────────
 
 /// Compute SNIP-12 message hash using starknet-rs's well-tested TypedData implementation.
@@ -68,26 +75,17 @@ pub fn compute_outside_execution_hash(
         .ok_or_else(|| WalletError::Signing("no message in typed data".into()))?;
 
     // Encode each Call with selector as RAW FELT (not keccak'd)
-    let calls = message
-        .get("Calls")
-        .and_then(|c| c.as_array())
-        .ok_or_else(|| WalletError::Signing("no Calls in message".into()))?;
+    let calls = canonical_calls_from_message(message, WalletError::Signing)?;
 
     let mut call_hashes = Vec::with_capacity(calls.len());
-    for call in calls {
-        let to = json_felt(call.get("To"), "Call.To")?;
-        let selector = json_felt(call.get("Selector"), "Call.Selector")?; // raw felt!
-        let calldata = call
-            .get("Calldata")
-            .and_then(|c| c.as_array())
-            .ok_or_else(|| WalletError::Signing("no Calldata in Call".into()))?;
-        let cd_felts: Vec<Felt> = calldata
-            .iter()
-            .enumerate()
-            .map(|(i, v)| json_felt(Some(v), &format!("Calldata[{i}]")))
-            .collect::<Result<_, _>>()?;
-        let cd_hash = poseidon_hash_many(&cd_felts);
-        call_hashes.push(poseidon_hash_many(&[call_type_hash, to, selector, cd_hash]));
+    for call in &calls {
+        let cd_hash = poseidon_hash_many(&call.calldata);
+        call_hashes.push(poseidon_hash_many(&[
+            call_type_hash,
+            call.to,
+            call.selector,
+            cd_hash,
+        ]));
     }
     let calls_hash = poseidon_hash_many(&call_hashes);
 
@@ -113,6 +111,18 @@ pub fn compute_outside_execution_hash(
         *account,
         oe_hash,
     ]))
+}
+
+pub fn sign_validated_paymaster_invoke(
+    typed_data_json: &serde_json::Value,
+    expected_calls: &[serde_json::Value],
+    account: &Felt,
+    chain_id: &str,
+    private_key: &Felt,
+) -> Result<(Felt, Felt), WalletError> {
+    validate_paymaster_invoke_typed_data(typed_data_json, expected_calls, chain_id)?;
+    let hash = compute_outside_execution_hash(typed_data_json, account)?;
+    sign_message_hash(&hash, private_key)
 }
 
 /// Convert starknet-rs Felt to starknet-types-core Felt.
@@ -189,46 +199,138 @@ pub fn validate_typed_data_calls(
     typed_data_json: &serde_json::Value,
     expected_calls: &[serde_json::Value],
 ) -> Result<(), WalletError> {
-    // Extract calls from the message
     let message = typed_data_json
         .get("message")
         .ok_or_else(|| WalletError::TypedDataValidation("no message field in typed data".into()))?;
+    let actual_calls = canonical_calls_from_message(message, WalletError::TypedDataValidation)?;
+    let expected_calls = canonical_calls_from_expected(expected_calls)?;
 
-    let msg_calls = message
-        .get("calls")
-        .or_else(|| message.get("Calls"))
-        .and_then(|c| c.as_array())
+    validate_canonical_calls(&actual_calls, &expected_calls)
+}
+
+pub fn validate_paymaster_invoke_typed_data(
+    typed_data_json: &serde_json::Value,
+    expected_calls: &[serde_json::Value],
+    expected_chain_id: &str,
+) -> Result<(), WalletError> {
+    let primary_type = typed_data_json
+        .get("primaryType")
+        .and_then(|value| value.as_str())
         .ok_or_else(|| {
-            WalletError::TypedDataValidation("no calls field in typed data message".into())
+            WalletError::TypedDataValidation("missing primaryType in typed data".into())
         })?;
-
-    if msg_calls.len() != expected_calls.len() {
+    if primary_type != "OutsideExecution" {
         return Err(WalletError::TypedDataValidation(format!(
-            "call count mismatch: expected {}, got {}",
-            expected_calls.len(),
-            msg_calls.len()
+            "unexpected primaryType: {primary_type}"
         )));
     }
 
-    // Verify each call's `to` and `selector` match
-    for (i, (msg_call, expected)) in msg_calls.iter().zip(expected_calls.iter()).enumerate() {
-        let msg_to = msg_call.get("To").or_else(|| msg_call.get("to"));
-        let exp_to = expected.get("To").or_else(|| expected.get("to"));
-        if msg_to != exp_to {
+    let domain = typed_data_json
+        .get("domain")
+        .ok_or_else(|| WalletError::TypedDataValidation("missing domain in typed data".into()))?;
+    let actual_chain_id = parse_chain_id_field(
+        domain,
+        &["chainId", "chain_id"],
+        "domain.chainId",
+        WalletError::TypedDataValidation,
+    )?;
+    let expected_chain_id =
+        short_string_to_felt(expected_chain_id).map_err(WalletError::TypedDataValidation)?;
+    if actual_chain_id != expected_chain_id {
+        return Err(WalletError::TypedDataValidation(format!(
+            "chain ID mismatch: expected {expected_chain_id}, got {actual_chain_id}"
+        )));
+    }
+
+    validate_typed_data_calls(typed_data_json, expected_calls)
+}
+
+fn canonical_calls_from_message(
+    message: &serde_json::Value,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Vec<CanonicalCall>, WalletError> {
+    let calls = message
+        .get("Calls")
+        .or_else(|| message.get("calls"))
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| mk_err("no calls field in typed data message".into()))?;
+    calls
+        .iter()
+        .enumerate()
+        .map(|(index, call)| {
+            canonical_call_from_value(call, &format!("message.calls[{index}]"), mk_err)
+        })
+        .collect()
+}
+
+fn canonical_calls_from_expected(
+    expected_calls: &[serde_json::Value],
+) -> Result<Vec<CanonicalCall>, WalletError> {
+    expected_calls
+        .iter()
+        .enumerate()
+        .map(|(index, call)| {
+            canonical_call_from_value(
+                call,
+                &format!("expected_calls[{index}]"),
+                WalletError::TypedDataValidation,
+            )
+        })
+        .collect()
+}
+
+fn canonical_call_from_value(
+    call: &serde_json::Value,
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<CanonicalCall, WalletError> {
+    let to = parse_felt_field(call, &["To", "to"], &format!("{ctx}.to"), mk_err)?;
+    let selector = parse_felt_field(
+        call,
+        &["Selector", "selector"],
+        &format!("{ctx}.selector"),
+        mk_err,
+    )?;
+    let calldata = parse_felt_array_field(
+        call,
+        &["Calldata", "calldata"],
+        &format!("{ctx}.calldata"),
+        mk_err,
+    )?;
+
+    Ok(CanonicalCall {
+        to,
+        selector,
+        calldata,
+    })
+}
+
+fn validate_canonical_calls(
+    actual_calls: &[CanonicalCall],
+    expected_calls: &[CanonicalCall],
+) -> Result<(), WalletError> {
+    if actual_calls.len() != expected_calls.len() {
+        return Err(WalletError::TypedDataValidation(format!(
+            "call count mismatch: expected {}, got {}",
+            expected_calls.len(),
+            actual_calls.len()
+        )));
+    }
+
+    for (index, (actual, expected)) in actual_calls.iter().zip(expected_calls.iter()).enumerate() {
+        if actual.to != expected.to {
             return Err(WalletError::TypedDataValidation(format!(
-                "call[{i}] 'to' address mismatch"
+                "call[{index}] to mismatch"
             )));
         }
-
-        let msg_sel = msg_call
-            .get("Selector")
-            .or_else(|| msg_call.get("selector"));
-        let exp_sel = expected
-            .get("Selector")
-            .or_else(|| expected.get("selector"));
-        if msg_sel != exp_sel {
+        if actual.selector != expected.selector {
             return Err(WalletError::TypedDataValidation(format!(
-                "call[{i}] selector mismatch"
+                "call[{index}] selector mismatch"
+            )));
+        }
+        if actual.calldata != expected.calldata {
+            return Err(WalletError::TypedDataValidation(format!(
+                "call[{index}] calldata mismatch"
             )));
         }
     }
@@ -236,9 +338,111 @@ pub fn validate_typed_data_calls(
     Ok(())
 }
 
+fn parse_felt_array_field(
+    object: &serde_json::Value,
+    keys: &[&str],
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Vec<Felt>, WalletError> {
+    let values = get_object_field(object, keys)
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| mk_err(format!("missing {ctx}")))?;
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| parse_felt_value(value, &format!("{ctx}[{index}]"), mk_err))
+        .collect()
+}
+
+fn parse_felt_field(
+    object: &serde_json::Value,
+    keys: &[&str],
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Felt, WalletError> {
+    let value = get_object_field(object, keys).ok_or_else(|| mk_err(format!("missing {ctx}")))?;
+    parse_felt_value(value, ctx, mk_err)
+}
+
+fn parse_chain_id_field(
+    object: &serde_json::Value,
+    keys: &[&str],
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Felt, WalletError> {
+    let value = get_object_field(object, keys).ok_or_else(|| mk_err(format!("missing {ctx}")))?;
+    match value {
+        serde_json::Value::String(s) => parse_chain_id_value(s, ctx, mk_err),
+        serde_json::Value::Number(_) => parse_felt_value(value, ctx, mk_err),
+        _ => Err(mk_err(format!("expected string or number for {ctx}"))),
+    }
+}
+
+fn parse_chain_id_value(
+    value: &str,
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Felt, WalletError> {
+    if let Ok(felt) = Felt::from_hex(value) {
+        return Ok(felt);
+    }
+    if let Ok(felt) = Felt::from_dec_str(value) {
+        return Ok(felt);
+    }
+    short_string_to_felt(value).map_err(|e| mk_err(format!("invalid {ctx}: {e}")))
+}
+
+fn parse_felt_value(
+    value: &serde_json::Value,
+    ctx: &str,
+    mk_err: fn(String) -> WalletError,
+) -> Result<Felt, WalletError> {
+    match value {
+        serde_json::Value::String(s) => Felt::from_hex(s)
+            .or_else(|_| Felt::from_dec_str(s))
+            .map_err(|e| mk_err(format!("parse felt {ctx} '{s}': {e}"))),
+        serde_json::Value::Number(n) => {
+            let felt_value = n
+                .as_u64()
+                .ok_or_else(|| mk_err(format!("{ctx}: not a u64")))?;
+            Ok(Felt::from(felt_value))
+        }
+        _ => Err(mk_err(format!("expected string or number for {ctx}"))),
+    }
+}
+
+fn get_object_field<'a>(
+    object: &'a serde_json::Value,
+    keys: &[&str],
+) -> Option<&'a serde_json::Value> {
+    keys.iter().find_map(|key| object.get(*key))
+}
+
+fn short_string_to_felt(value: &str) -> Result<Felt, String> {
+    if value.len() > 31 {
+        return Err(format!("short string too long: {}", value.len()));
+    }
+    let bytes = value.as_bytes();
+    let mut padded = [0u8; 32];
+    padded[32 - bytes.len()..].copy_from_slice(bytes);
+    Ok(Felt::from_bytes_be(&padded))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn paymaster_typed_data(calls: serde_json::Value, chain_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "primaryType": "OutsideExecution",
+            "domain": {
+                "chainId": chain_id,
+            },
+            "message": {
+                "Calls": calls,
+            }
+        })
+    }
 
     #[test]
     fn test_sign_and_verify() {
@@ -283,10 +487,51 @@ mod tests {
         ];
 
         let typed_data_json = serde_json::json!({
-            "message": { "calls": calls.clone() }
+            "message": {
+                "Calls": [
+                    {"To": "0x1", "Selector": "0x2", "Calldata": ["0xa"]},
+                    {"To": "0x3", "Selector": "0x4", "Calldata": ["0xb"]},
+                ]
+            }
         });
 
         assert!(validate_typed_data_calls(&typed_data_json, &calls).is_ok());
+    }
+
+    #[test]
+    fn test_call_validation_rejects_calldata_mismatch() {
+        let expected = vec![serde_json::json!({
+            "to": "0x1",
+            "selector": "0x2",
+            "calldata": ["0xa", "0xb"],
+        })];
+        let typed_data_json = serde_json::json!({
+            "message": {
+                "Calls": [
+                    {"To": "0x1", "Selector": "0x2", "Calldata": ["0xa", "0xc"]},
+                ]
+            }
+        });
+
+        let err = validate_typed_data_calls(&typed_data_json, &expected).unwrap_err();
+        assert!(err.to_string().contains("calldata mismatch"));
+    }
+
+    #[test]
+    fn test_paymaster_validation_rejects_wrong_chain_id() {
+        let calls = serde_json::json!([
+            {"To": "0x1", "Selector": "0x2", "Calldata": []}
+        ]);
+        let typed_data_json = paymaster_typed_data(calls, "SN_MAIN");
+        let expected = vec![serde_json::json!({
+            "to": "0x1",
+            "selector": "0x2",
+            "calldata": [],
+        })];
+
+        let err = validate_paymaster_invoke_typed_data(&typed_data_json, &expected, "SN_SEPOLIA")
+            .unwrap_err();
+        assert!(err.to_string().contains("chain ID mismatch"));
     }
 
     #[test]

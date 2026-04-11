@@ -41,16 +41,35 @@ pub trait TransactionSubmitter: Send + Sync {
 /// and `submit` uses SNIP-29 `deploy_and_invoke` to deploy + invoke atomically.
 pub struct PaymasterSubmitter {
     paymaster: PaymasterClient,
+    chain_id: String,
     /// Pending deployment data set by `ensure_deployed`, consumed by `submit`.
     pending_deploy: std::sync::Mutex<Option<serde_json::Value>>,
 }
 
 impl PaymasterSubmitter {
-    pub fn new(paymaster_url: &str, api_key: Option<&str>) -> Self {
+    pub fn new(paymaster_url: &str, api_key: Option<&str>, chain_id: &str) -> Self {
         Self {
             paymaster: PaymasterClient::new(paymaster_url, api_key),
+            chain_id: chain_id.to_string(),
             pending_deploy: std::sync::Mutex::new(None),
         }
+    }
+
+    fn sign_paymaster_invoke(
+        &self,
+        account: &ActiveAccount,
+        typed_data: &serde_json::Value,
+        expected_calls: &[serde_json::Value],
+    ) -> Result<(String, String), WalletError> {
+        let (r, s) = signing::sign_validated_paymaster_invoke(
+            typed_data,
+            expected_calls,
+            &account.starknet_address,
+            &self.chain_id,
+            &account.starknet_private_key,
+        )?;
+
+        Ok((format!("{:#066x}", r), format!("{:#066x}", s)))
     }
 }
 
@@ -130,21 +149,20 @@ impl TransactionSubmitter for PaymasterSubmitter {
         )
         .map_err(|e| WalletError::Kms(e.to_string()))?;
 
-        let calls_json = serde_json::Value::Array(vec![call_to_json(&approve_call)]);
+        let calls_json = vec![call_to_json(&approve_call)];
 
         let build_resp = self
             .paymaster
-            .build_deploy_and_invoke(&deployment, &address_hex, calls_json)
+            .build_deploy_and_invoke(
+                &deployment,
+                &address_hex,
+                serde_json::Value::Array(calls_json.clone()),
+            )
             .await?;
 
-        let msg_hash = signing::compute_outside_execution_hash(
-            &build_resp.typed_data,
-            &account.starknet_address,
-        )?;
-        let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
+        let (r_hex, s_hex) =
+            self.sign_paymaster_invoke(account, &build_resp.typed_data, &calls_json)?;
 
-        let r_hex = format!("{:#066x}", r);
-        let s_hex = format!("{:#066x}", s);
         let exec_resp = self
             .paymaster
             .execute_deploy_and_invoke(
@@ -166,7 +184,6 @@ impl TransactionSubmitter for PaymasterSubmitter {
         let address_hex = format!("{:#066x}", account.starknet_address);
 
         let calls_json: Vec<serde_json::Value> = calls.iter().map(call_to_json).collect();
-        let calls_json = serde_json::Value::Array(calls_json);
 
         // Check if account needs deployment (set by ensure_deployed).
         let pending_deploy = self.pending_deploy.lock().unwrap().take();
@@ -175,17 +192,16 @@ impl TransactionSubmitter for PaymasterSubmitter {
             // Atomic deploy + invoke via SNIP-29 deploy_and_invoke.
             let build_resp = self
                 .paymaster
-                .build_deploy_and_invoke(deployment, &address_hex, calls_json)
+                .build_deploy_and_invoke(
+                    deployment,
+                    &address_hex,
+                    serde_json::Value::Array(calls_json.clone()),
+                )
                 .await?;
 
-            let msg_hash = signing::compute_outside_execution_hash(
-                &build_resp.typed_data,
-                &account.starknet_address,
-            )?;
-            let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
+            let (r_hex, s_hex) =
+                self.sign_paymaster_invoke(account, &build_resp.typed_data, &calls_json)?;
 
-            let r_hex = format!("{:#066x}", r);
-            let s_hex = format!("{:#066x}", s);
             // ArgentX v0.4 concise signature: [r, s] (contract reads pubkey from storage)
             let exec_resp = self
                 .paymaster
@@ -202,18 +218,11 @@ impl TransactionSubmitter for PaymasterSubmitter {
             // Normal invoke flow (account already deployed).
             let build_resp = self
                 .paymaster
-                .build_typed_data(&address_hex, calls_json)
+                .build_typed_data(&address_hex, serde_json::Value::Array(calls_json.clone()))
                 .await?;
 
-            let msg_hash = signing::compute_outside_execution_hash(
-                &build_resp.typed_data,
-                &account.starknet_address,
-            )?;
-
-            let (r, s) = signing::sign_message_hash(&msg_hash, &account.starknet_private_key)?;
-
-            let r_hex = format!("{:#066x}", r);
-            let s_hex = format!("{:#066x}", s);
+            let (r_hex, s_hex) =
+                self.sign_paymaster_invoke(account, &build_resp.typed_data, &calls_json)?;
             // ArgentX v0.4 concise signature: [r, s] (contract reads pubkey from storage)
             let exec_resp = self
                 .paymaster

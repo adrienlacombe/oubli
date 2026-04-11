@@ -875,6 +875,12 @@ internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -894,7 +900,13 @@ internal interface IntegrityCheckingUniffiLib : Library {
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee(
 ): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_create_ln_invoice(
+): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_ensure_deployed(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_ensure_swap_engine(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address(
 ): Short
@@ -1049,7 +1061,13 @@ fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_fee(`ptr`: Pointer,`amou
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_calculate_send_fee(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_create_ln_invoice(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(`ptr`: Pointer,`contactId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_ensure_deployed(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_ensure_swap_engine(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_find_contact_by_address(`ptr`: Pointer,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1263,7 +1281,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_calculate_send_fee() != 20848.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_create_ln_invoice() != 37782.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_delete_contact() != 32744.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_ensure_deployed() != 53487.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_ensure_swap_engine() != 18083.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_find_contact_by_address() != 34436.toShort()) {
@@ -1855,7 +1882,13 @@ public interface OubliWalletInterface {
     
     fun `calculateSendFee`(`amountSats`: kotlin.String, `recipient`: kotlin.String): kotlin.String
     
+    fun `createLnInvoice`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi
+    
     fun `deleteContact`(`contactId`: kotlin.String)
+    
+    fun `ensureDeployed`()
+    
+    fun `ensureSwapEngine`()
     
     fun `findContactByAddress`(`address`: kotlin.String): ContactFfi?
     
@@ -2050,12 +2083,49 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
     
 
     
+    @Throws(OubliException::class)override fun `createLnInvoice`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi {
+            return FfiConverterTypeSwapQuoteFFI.lift(
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_create_ln_invoice(
+        it, FfiConverterULong.lower(`amountSats`),FfiConverterBoolean.lower(`exactIn`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(OubliException::class)override fun `deleteContact`(`contactId`: kotlin.String)
         = 
     callWithPointer {
     uniffiRustCallWithError(OubliException) { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_delete_contact(
         it, FfiConverterString.lower(`contactId`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(OubliException::class)override fun `ensureDeployed`()
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_ensure_deployed(
+        it, _status)
+}
+    }
+    
+    
+
+    
+    @Throws(OubliException::class)override fun `ensureSwapEngine`()
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_ensure_swap_engine(
+        it, _status)
 }
     }
     

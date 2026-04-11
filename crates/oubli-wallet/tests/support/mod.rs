@@ -77,8 +77,11 @@ fn faucet_active_account(config: &NetworkConfig) -> ActiveAccount {
 pub async fn ensure_faucet_deployed_via_paymaster(config: &NetworkConfig) -> Option<String> {
     let faucet = faucet_active_account(config);
     let rpc = RpcClient::new(config).expect("RpcClient");
-    let submitter =
-        PaymasterSubmitter::new(&config.paymaster_url, config.paymaster_api_key.as_deref());
+    let submitter = PaymasterSubmitter::new(
+        &config.paymaster_url,
+        config.paymaster_api_key.as_deref(),
+        &config.chain_id,
+    );
 
     submitter
         .deploy_account(&faucet, config, &rpc)
@@ -96,8 +99,11 @@ pub async fn faucet_transfer_via_paymaster(
 
     let faucet = faucet_active_account(config);
     let rpc = RpcClient::new(config).expect("RpcClient");
-    let submitter =
-        PaymasterSubmitter::new(&config.paymaster_url, config.paymaster_api_key.as_deref());
+    let submitter = PaymasterSubmitter::new(
+        &config.paymaster_url,
+        config.paymaster_api_key.as_deref(),
+        &config.chain_id,
+    );
 
     let erc20 = RsFelt::from_hex(&config.token_contract).expect("invalid token contract");
     let recipient = RsFelt::from_bytes_be(&to_address.to_bytes_be());

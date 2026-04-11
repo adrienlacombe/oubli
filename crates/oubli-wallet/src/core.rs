@@ -125,6 +125,7 @@ impl WalletCore {
         let submitter = Box::new(PaymasterSubmitter::new(
             &config.paymaster_url,
             config.paymaster_api_key.as_deref(),
+            &config.chain_id,
         ));
         Self::new_with_submitter(storage, config, submitter)
     }
