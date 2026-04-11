@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -136,8 +137,7 @@ class KeystoreStorage(
             val promptInfo = BiometricPrompt.PromptInfo.Builder()
                 .setTitle("Oubli")
                 .setSubtitle(reason)
-                .setNegativeButtonText("Cancel")
-                .setAllowedAuthenticators(BIOMETRIC_STRONG)
+                .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
                 .build()
             prompt.authenticate(promptInfo)
         }
@@ -152,7 +152,7 @@ class KeystoreStorage(
 
     override fun biometricAvailable(): Boolean {
         val biometricManager = BiometricManager.from(context)
-        return biometricManager.canAuthenticate(BIOMETRIC_STRONG) ==
+        return biometricManager.canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL) ==
             BiometricManager.BIOMETRIC_SUCCESS
     }
 

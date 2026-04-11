@@ -89,7 +89,7 @@ final class KeychainStorage: PlatformStorageCallback {
         let context = LAContext()
         var error: NSError?
 
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             return false
         }
 
@@ -100,7 +100,7 @@ final class KeychainStorage: PlatformStorageCallback {
         let semaphore = DispatchSemaphore(value: 0)
 
         context.evaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometrics,
+            .deviceOwnerAuthentication,
             localizedReason: reason
         ) { result, err in
             success = result
@@ -129,7 +129,7 @@ final class KeychainStorage: PlatformStorageCallback {
     func biometricAvailable() -> Bool {
         let context = LAContext()
         var error: NSError?
-        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
     }
 
     func generateHardwareSalt() throws -> [UInt8] {
