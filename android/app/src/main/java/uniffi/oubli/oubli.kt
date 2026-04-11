@@ -654,6 +654,9 @@ internal open class UniffiForeignFutureStructVoid(
 internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
     fun callback(`callbackData`: Long,`result`: UniffiForeignFutureStructVoid.UniffiByValue,)
 }
+internal interface UniffiCallbackInterfacePaymentNotificationCallbackMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfacePlatformStorageCallbackMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -671,6 +674,22 @@ internal interface UniffiCallbackInterfacePlatformStorageCallbackMethod4 : com.s
 }
 internal interface UniffiCallbackInterfacePlatformStorageCallbackMethod5 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+@Structure.FieldOrder("onIncomingPayment", "uniffiFree")
+internal open class UniffiVTableCallbackInterfacePaymentNotificationCallback(
+    @JvmField internal var `onIncomingPayment`: UniffiCallbackInterfacePaymentNotificationCallbackMethod0? = null,
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+) : Structure() {
+    class UniffiByValue(
+        `onIncomingPayment`: UniffiCallbackInterfacePaymentNotificationCallbackMethod0? = null,
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    ): UniffiVTableCallbackInterfacePaymentNotificationCallback(`onIncomingPayment`,`uniffiFree`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfacePaymentNotificationCallback) {
+        `onIncomingPayment` = other.`onIncomingPayment`
+        `uniffiFree` = other.`uniffiFree`
+    }
+
 }
 @Structure.FieldOrder("secureStore", "secureLoad", "secureDelete", "requestBiometric", "biometricAvailable", "generateHardwareSalt", "uniffiFree")
 internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
@@ -703,6 +722,10 @@ internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
     }
 
 }
+
+
+
+
 
 
 
@@ -925,6 +948,8 @@ fun uniffi_oubli_bridge_checksum_method_oubliwallet_pay_lightning(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait(
 ): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_register_payment_callback(
+): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc(
@@ -948,6 +973,8 @@ fun uniffi_oubli_bridge_checksum_method_oubliwallet_update_rpc_url(
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_validate_mnemonic(
 ): Short
 fun uniffi_oubli_bridge_checksum_constructor_oubliwallet_new(
+): Short
+fun uniffi_oubli_bridge_checksum_method_paymentnotificationcallback_on_incoming_payment(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store(
 ): Short
@@ -999,6 +1026,7 @@ internal interface UniffiLib : Library {
             val lib = loadIndirect<UniffiLib>(componentName)
             // No need to check the contract version and checksums, since 
             // we already did that with `IntegrityCheckingUniffiLib` above.
+            uniffiCallbackInterfacePaymentNotificationCallback.register(lib)
             uniffiCallbackInterfacePlatformStorageCallback.register(lib)
             // Loading of library with integrity check done.
             lib
@@ -1075,6 +1103,8 @@ fun uniffi_oubli_bridge_fn_method_oubliwallet_pay_lightning(`ptr`: Pointer,`bolt
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_register_payment_callback(`ptr`: Pointer,`callback`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(`ptr`: Pointer,`contact`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1096,6 +1126,8 @@ fun uniffi_oubli_bridge_fn_method_oubliwallet_update_contact_last_used(`ptr`: Po
 fun uniffi_oubli_bridge_fn_method_oubliwallet_update_rpc_url(`ptr`: Pointer,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_validate_mnemonic(`ptr`: Pointer,`phrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_oubli_bridge_fn_init_callback_vtable_paymentnotificationcallback(`vtable`: UniffiVTableCallbackInterfacePaymentNotificationCallback,
 ): Unit
 fun uniffi_oubli_bridge_fn_init_callback_vtable_platformstoragecallback(`vtable`: UniffiVTableCallbackInterfacePlatformStorageCallback,
 ): Unit
@@ -1312,6 +1344,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait() != 42286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_register_payment_callback() != 50308.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact() != 3700.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1346,6 +1381,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_constructor_oubliwallet_new() != 45245.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_paymentnotificationcallback_on_incoming_payment() != 7338.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_platformstoragecallback_secure_store() != 9671.toShort()) {
@@ -1871,6 +1909,8 @@ public interface OubliWalletInterface {
     
     fun `receiveLightningWait`(`swapId`: kotlin.String)
     
+    fun `registerPaymentCallback`(`callback`: PaymentNotificationCallback)
+    
     fun `saveContact`(`contact`: ContactFfi): kotlin.String
     
     fun `swapBtcToWbtc`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi
@@ -2340,6 +2380,17 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
     uniffiRustCallWithError(OubliException) { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(
         it, FfiConverterString.lower(`swapId`),_status)
+}
+    }
+    
+    
+
+    override fun `registerPaymentCallback`(`callback`: PaymentNotificationCallback)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_register_payment_callback(
+        it, FfiConverterTypePaymentNotificationCallback.lower(`callback`),_status)
 }
     }
     
@@ -3115,6 +3166,59 @@ public object FfiConverterTypeWalletStateFFI: FfiConverterRustBuffer<WalletState
 }
 
 
+
+
+
+
+
+public interface PaymentNotificationCallback {
+    
+    fun `onIncomingPayment`(`event`: ActivityEventFfi)
+    
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfacePaymentNotificationCallback {
+    internal object `onIncomingPayment`: UniffiCallbackInterfacePaymentNotificationCallbackMethod0 {
+        override fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypePaymentNotificationCallback.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`onIncomingPayment`(
+                    FfiConverterTypeActivityEventFFI.lift(`event`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypePaymentNotificationCallback.handleMap.remove(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfacePaymentNotificationCallback.UniffiByValue(
+        `onIncomingPayment`,
+        uniffiFree,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_oubli_bridge_fn_init_callback_vtable_paymentnotificationcallback(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypePaymentNotificationCallback: FfiConverterCallbackInterface<PaymentNotificationCallback>()
 
 
 

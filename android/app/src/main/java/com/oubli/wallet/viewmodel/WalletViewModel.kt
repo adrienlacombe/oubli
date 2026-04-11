@@ -13,11 +13,15 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uniffi.oubli.ActivityEventFfi
 import uniffi.oubli.ContactFfi
 import uniffi.oubli.OubliException
 import uniffi.oubli.WalletStateFfi
@@ -52,7 +56,16 @@ class WalletViewModel @Inject constructor(
     private val _lightningReceiveState = MutableStateFlow(loadLightningReceiveState())
     val lightningReceiveState: StateFlow<LightningReceiveUiState> = _lightningReceiveState.asStateFlow()
 
+    /** One-shot events emitted when the Rust poll detects a new incoming payment. */
+    private val _incomingPaymentEvent = MutableSharedFlow<ActivityEventFfi>(extraBufferCapacity = 5)
+    val incomingPaymentEvent: SharedFlow<ActivityEventFfi> = _incomingPaymentEvent.asSharedFlow()
+
+    /** Tx hashes of recently received payments — used for transient UI highlights. */
+    private val _highlightedTxHashes = MutableStateFlow<Set<String>>(emptySet())
+    val highlightedTxHashes: StateFlow<Set<String>> = _highlightedTxHashes.asStateFlow()
+
     private var activityPollingJob: Job? = null
+    private var paymentCallbackJob: Job? = null
     private var lightningReceiveWaitJob: Job? = null
 
     private fun loadLightningSendState(): LightningSendUiState {
@@ -207,6 +220,8 @@ class WalletViewModel @Inject constructor(
         if (!activityPollingEnabled) {
             activityPollingJob?.cancel()
             activityPollingJob = null
+            paymentCallbackJob?.cancel()
+            paymentCallbackJob = null
             return
         }
         val shouldPoll = walletState == WalletStateFfi.READY || walletState == WalletStateFfi.PROCESSING
@@ -243,9 +258,25 @@ class WalletViewModel @Inject constructor(
                     }
                 }
             }
+            // Collect incoming payment events from the Rust poll thread
+            if (paymentCallbackJob == null) {
+                paymentCallbackJob = viewModelScope.launch(ioDispatcher) {
+                    repository.incomingPayments.collect { event ->
+                        _incomingPaymentEvent.emit(event)
+                        _highlightedTxHashes.update { it + event.txHash }
+                        // Remove highlight after 5 seconds
+                        launch {
+                            delay(5000)
+                            _highlightedTxHashes.update { it - event.txHash }
+                        }
+                    }
+                }
+            }
         } else if (!shouldPoll && activityPollingJob != null) {
             activityPollingJob?.cancel()
             activityPollingJob = null
+            paymentCallbackJob?.cancel()
+            paymentCallbackJob = null
         }
     }
 

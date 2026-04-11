@@ -65,6 +65,7 @@ fun ActivityList(
     balanceSats: String = "0",
     onShowMessage: (String) -> Unit = {},
     onOpenDetails: (ActivityEventFfi) -> Unit = {},
+    highlightedTxHashes: Set<String> = emptySet(),
 ) {
     Text(
         text = "Activity",
@@ -121,6 +122,7 @@ fun ActivityList(
                     event = event,
                     contactName = contactNames[event.txHash],
                     onOpenDetails = { onOpenDetails(event) },
+                    isHighlighted = event.txHash in highlightedTxHashes,
                 )
             }
         }
@@ -170,6 +172,7 @@ private fun ActivityItem(
     event: ActivityEventFfi,
     contactName: String? = null,
     onOpenDetails: () -> Unit,
+    isHighlighted: Boolean = false,
 ) {
     val info = activityInfo(event.eventType)
     val isIncoming = event.eventType in listOf("Fund", "TransferIn", "Rollover")
@@ -189,6 +192,12 @@ private fun ActivityItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (isHighlighted) Modifier.background(
+                    OubliReceived.copy(alpha = 0.15f),
+                    RoundedCornerShape(8.dp),
+                ) else Modifier,
+            )
             .padding(vertical = 8.dp, horizontal = 4.dp)
             .clickable(onClick = onOpenDetails)
             .semantics(mergeDescendants = true) {

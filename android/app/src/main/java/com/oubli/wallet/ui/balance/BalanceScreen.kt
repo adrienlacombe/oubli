@@ -109,6 +109,8 @@ fun BalanceScreen(
     isRefreshing: Boolean = false,
     activityContactNames: Map<String, String> = emptyMap(),
     onShowMessage: (String) -> Unit = {},
+    incomingPaymentFlow: kotlinx.coroutines.flow.SharedFlow<ActivityEventFfi>? = null,
+    highlightedTxHashes: Set<String> = emptySet(),
 ) {
     var showDialog by rememberSaveable { mutableStateOf<ActionDialog?>(null) }
     var showMenu by remember { mutableStateOf(false) }
@@ -287,6 +289,7 @@ fun BalanceScreen(
             balanceSats = balanceSats,
             onShowMessage = onShowMessage,
             onOpenDetails = { selectedActivity = it },
+            highlightedTxHashes = highlightedTxHashes,
         )
     }
     } // PullToRefreshBox
@@ -363,6 +366,7 @@ fun BalanceScreen(
                 fiatToSats = fiatToSats,
                 fiatCurrency = fiatCurrency,
                 fiatSymbol = WalletViewModel.fiatSymbol(fiatCurrency),
+                incomingPaymentFlow = incomingPaymentFlow,
             )
         }
 ActionDialog.ShowSeedPhrase -> {

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -55,13 +56,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.oubli.wallet.ui.components.FullScreenTaskDialog
+import com.oubli.wallet.ui.theme.OubliSuccessBg
 import com.oubli.wallet.ui.util.generateQrBitmap
 import com.oubli.wallet.ui.util.lightningInvoiceShareText
 import com.oubli.wallet.ui.util.parseBolt11AmountSats
 import com.oubli.wallet.ui.util.shareText
 import com.oubli.wallet.ui.util.staticReceiveShareText
 import com.oubli.wallet.viewmodel.LightningReceiveUiState
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import uniffi.oubli.ActivityEventFfi
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -80,10 +84,26 @@ fun ReceiveDialog(
     fiatToSats: (String) -> String? = { null },
     fiatCurrency: String = "usd",
     fiatSymbol: String = "$",
+    incomingPaymentFlow: SharedFlow<ActivityEventFfi>? = null,
 ) {
     val context = LocalContext.current
     val pagerState = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
+
+    // Incoming payment success overlay
+    var receivedPayment by remember { mutableStateOf<ActivityEventFfi?>(null) }
+    LaunchedEffect(Unit) {
+        incomingPaymentFlow?.collect { event ->
+            receivedPayment = event
+        }
+    }
+    // Auto-dismiss success overlay after 4 seconds
+    LaunchedEffect(receivedPayment) {
+        if (receivedPayment != null) {
+            kotlinx.coroutines.delay(4000)
+            receivedPayment = null
+        }
+    }
 
     // Oubli receive amount (optional)
     var oubliAmountSats by rememberSaveable { mutableStateOf("") }
@@ -119,9 +139,45 @@ fun ReceiveDialog(
     }
 
     FullScreenTaskDialog(
-        title = "Receive",
+        title = if (receivedPayment != null) "Payment Received" else "Receive",
         onDismissRequest = dismissReceiveDialog,
     ) {
+        // Success overlay when an incoming payment is detected
+        if (receivedPayment != null) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(OubliSuccessBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = "Payment received",
+                        modifier = Modifier.size(72.dp),
+                        tint = OubliReceived,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "${receivedPayment!!.amountSats ?: ""} sats received",
+                        style = MaterialTheme.typography.headlineSmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "New ${receivedPayment!!.eventType.lowercase()} detected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            return@FullScreenTaskDialog
+        }
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -338,6 +338,14 @@ impl oubli_store::PlatformStorage for PlatformStorageAdapter {
     }
 }
 
+// ── Payment notification callback ───────────────────────────
+
+/// Called from the background poll thread when a new incoming payment
+/// (TransferIn or Fund) is detected on-chain.
+pub trait PaymentNotificationCallback: Send + Sync {
+    fn on_incoming_payment(&self, event: ActivityEventFFI);
+}
+
 // ── WalletState conversion ───────────────────────────────────
 
 fn wallet_state_to_ffi(
@@ -440,6 +448,8 @@ pub struct OubliWallet {
     /// BTC price cache independent of the core mutex to avoid deadlocks.
     /// Keyed by lowercase currency code (e.g. "usd", "eur").
     btc_price_cache: Mutex<std::collections::HashMap<String, (f64, std::time::Instant)>>,
+    /// Optional callback invoked when a new incoming payment is detected.
+    payment_callback: Arc<Mutex<Option<Box<dyn PaymentNotificationCallback>>>>,
 }
 
 impl OubliWallet {
@@ -481,22 +491,71 @@ impl OubliWallet {
 
         let core = Arc::new(Mutex::new(core));
         let polling_active = Arc::new(AtomicBool::new(false));
+        let payment_callback: Arc<Mutex<Option<Box<dyn PaymentNotificationCallback>>>> =
+            Arc::new(Mutex::new(None));
 
         // Spawn background polling thread.
         // Uses try_lock so it never blocks user-initiated operations.
+        // Also detects new incoming payments and fires the callback.
         {
             let poll_core = Arc::clone(&core);
             let poll_handle = runtime.handle().clone();
             let poll_flag = Arc::clone(&polling_active);
+            let poll_cb = Arc::clone(&payment_callback);
+            let first_poll = AtomicBool::new(true);
             std::thread::Builder::new()
                 .name("oubli-poll".into())
                 .spawn(move || loop {
                     std::thread::sleep(Duration::from_secs(POLL_INTERVAL_SECS));
                     if !poll_flag.load(Ordering::Relaxed) {
+                        first_poll.store(true, Ordering::Relaxed);
                         continue;
                     }
                     if let Ok(mut core) = poll_core.try_lock() {
+                        // Snapshot known tx hashes before refresh
+                        let known: std::collections::HashSet<String> = core
+                            .get_cached_activity()
+                            .iter()
+                            .map(|e| e.tx_hash.clone())
+                            .collect();
+
                         let _ = poll_handle.block_on(core.handle_refresh_balance());
+
+                        // Skip notification on first poll (avoids false positives
+                        // when the cache is empty after unlock).
+                        if first_poll.swap(false, Ordering::Relaxed) {
+                            continue;
+                        }
+
+                        // Fetch fresh activity and detect new incoming payments
+                        if let Ok(events) = poll_handle.block_on(core.get_activity()) {
+                            let chain_id = core.chain_id().to_string();
+                            let new_incoming: Vec<_> = events
+                                .iter()
+                                .filter(|e| !known.contains(&e.tx_hash))
+                                .filter(|e| e.event_type == "TransferIn" || e.event_type == "Fund")
+                                .collect();
+
+                            if !new_incoming.is_empty() {
+                                if let Ok(guard) = poll_cb.lock() {
+                                    if let Some(ref cb) = *guard {
+                                        for event in new_incoming {
+                                            let explorer_url =
+                                                tx_explorer_url(&chain_id, &event.tx_hash);
+                                            cb.on_incoming_payment(ActivityEventFFI {
+                                                event_type: event.event_type.clone(),
+                                                amount_sats: event.amount_sats.clone(),
+                                                tx_hash: event.tx_hash.clone(),
+                                                block_number: event.block_number,
+                                                timestamp_secs: event.timestamp_secs,
+                                                status: event.status.as_str().to_string(),
+                                                explorer_url,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 })
                 .ok();
@@ -509,7 +568,14 @@ impl OubliWallet {
             seed_prompts: Mutex::new(Vec::new()),
             polling_active,
             btc_price_cache: Mutex::new(std::collections::HashMap::new()),
+            payment_callback,
         })
+    }
+
+    /// Register a callback that fires when a new incoming payment is detected
+    /// by the background poll thread.
+    pub fn register_payment_callback(&self, callback: Box<dyn PaymentNotificationCallback>) {
+        *self.payment_callback.lock().unwrap() = Some(callback);
     }
 
     pub fn get_state(&self) -> WalletStateInfo {

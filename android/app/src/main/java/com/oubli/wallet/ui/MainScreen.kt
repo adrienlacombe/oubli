@@ -49,6 +49,7 @@ fun MainScreen(
     val lightningOperation by walletViewModel.lightningOperation.collectAsStateWithLifecycle()
     val lightningSendState by walletViewModel.lightningSendState.collectAsStateWithLifecycle()
     val lightningReceiveState by walletViewModel.lightningReceiveState.collectAsStateWithLifecycle()
+    val highlightedTxHashes by walletViewModel.highlightedTxHashes.collectAsStateWithLifecycle()
 
     // Show user messages via snackbar
     val userMessage = state.userMessage
@@ -147,6 +148,8 @@ fun MainScreen(
                         isRefreshing = screen.isRefreshing,
                         activityContactNames = screen.activityContactNames,
                         onShowMessage = { walletViewModel.showMessage(it) },
+                        incomingPaymentFlow = walletViewModel.incomingPaymentEvent,
+                        highlightedTxHashes = highlightedTxHashes,
                     )
                 }
 

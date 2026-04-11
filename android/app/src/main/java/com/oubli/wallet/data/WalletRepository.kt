@@ -1,6 +1,7 @@
 package com.oubli.wallet.data
 
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.flow.SharedFlow
 import uniffi.oubli.ActivityEventFfi
 import uniffi.oubli.ContactFfi
 import uniffi.oubli.SeedBackupStateFfi
@@ -18,6 +19,9 @@ interface WalletRepository {
 
     /** Whether the wallet has been initialized. */
     val isInitialized: Boolean
+
+    /** Reactive stream of newly detected incoming payments. */
+    val incomingPayments: SharedFlow<ActivityEventFfi>
 
     // ---- State ----
 

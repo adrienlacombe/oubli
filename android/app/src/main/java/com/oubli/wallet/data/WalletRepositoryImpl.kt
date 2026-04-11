@@ -5,8 +5,12 @@ import androidx.fragment.app.FragmentActivity
 import com.oubli.wallet.platform.KeystoreStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import uniffi.oubli.ActivityEventFfi
+import uniffi.oubli.PaymentNotificationCallback
 import uniffi.oubli.ContactFfi
 import uniffi.oubli.OubliWallet
 import uniffi.oubli.SeedBackupStateFfi
@@ -27,6 +31,9 @@ class WalletRepositoryImpl @Inject constructor(
 
     private var wallet: OubliWallet? = null
 
+    private val _incomingPayments = MutableSharedFlow<ActivityEventFfi>(extraBufferCapacity = 10)
+    override val incomingPayments: SharedFlow<ActivityEventFfi> = _incomingPayments.asSharedFlow()
+
     override val isInitialized: Boolean
         get() = wallet != null
 
@@ -38,6 +45,11 @@ class WalletRepositoryImpl @Inject constructor(
                 activityRef = WeakReference(activity),
             )
             val w = OubliWallet(storage, null, null)
+            w.registerPaymentCallback(object : PaymentNotificationCallback {
+                override fun onIncomingPayment(event: ActivityEventFfi) {
+                    _incomingPayments.tryEmit(event)
+                }
+            })
             wallet = w
         }
     }
