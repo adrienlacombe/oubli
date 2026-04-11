@@ -1,0 +1,84 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      github-actions-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "rust"
+    allow:
+      - dependency-type: "direct"
+    groups:
+      rust-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "uniffi"
+      - dependency-name: "rquickjs"
+      - dependency-name: "starknet-types-core"
+      - dependency-name: "krusty-kms"
+      - dependency-name: "krusty-kms-common"
+      - dependency-name: "krusty-kms-crypto"
+      - dependency-name: "krusty-kms-sdk"
+      - dependency-name: "krusty-kms-client"
+
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "android"
+    allow:
+      - dependency-type: "direct"
+    groups:
+      android-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "com.android.application"
+      - dependency-name: "org.jetbrains.kotlin.android"
+      - dependency-name: "org.jetbrains.kotlin.plugin.compose"
+      - dependency-name: "com.google.dagger.hilt.android"
+      - dependency-name: "androidx.compose:compose-bom"
+
+# `oubli-swap-js` is intentionally omitted for now.
+# Version bumps there typically require regenerating the checked-in swap bundle,
+# which plain Dependabot cannot do before opening a PR.
