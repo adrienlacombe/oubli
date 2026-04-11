@@ -18,13 +18,8 @@ pub fn sats_to_tongo_units(sats_str: &str) -> Result<u64, WalletError> {
         return Err(WalletError::Denomination("amount must be > 0".into()));
     }
 
-    if satoshis % RATE != 0 {
-        return Err(WalletError::Denomination(format!(
-            "amount must be a multiple of {RATE} sats (1 tongo unit = {RATE} sats)"
-        )));
-    }
-
-    Ok(satoshis / RATE)
+    // Round up to the nearest tongo unit so the user never sees a denomination error.
+    Ok((satoshis + RATE - 1) / RATE)
 }
 
 /// Convert tongo units back to a satoshi display string.
@@ -81,9 +76,13 @@ mod tests {
     }
 
     #[test]
-    fn sats_to_tongo_not_multiple() {
-        // 7 sats is not a multiple of 10
-        assert!(sats_to_tongo_units("7").is_err());
+    fn sats_to_tongo_rounds_up() {
+        // 7 sats rounds up to 1 tongo unit (10 sats)
+        assert_eq!(sats_to_tongo_units("7").unwrap(), 1);
+        // 11 sats rounds up to 2 tongo units (20 sats)
+        assert_eq!(sats_to_tongo_units("11").unwrap(), 2);
+        // 15 sats rounds up to 2 tongo units (20 sats)
+        assert_eq!(sats_to_tongo_units("15").unwrap(), 2);
     }
 
     #[test]
