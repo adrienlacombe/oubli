@@ -44,7 +44,8 @@ fun FullScreenTaskDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding(),
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
             ) {
                 Box(
                     modifier = Modifier
@@ -79,7 +80,6 @@ fun FullScreenTaskDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface)
-                            .navigationBarsPadding()
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                     ) {
                         bottomBar()
