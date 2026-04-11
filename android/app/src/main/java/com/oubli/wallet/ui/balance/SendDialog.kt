@@ -75,14 +75,18 @@ import com.oubli.wallet.ui.theme.OubliErrorBg
 import com.oubli.wallet.ui.util.normalizeLightningInvoice
 import com.oubli.wallet.ui.util.parseOubliUri
 import com.oubli.wallet.ui.util.parseBolt11AmountSats
+import com.oubli.wallet.viewmodel.LightningSendStatus
+import com.oubli.wallet.viewmodel.LightningSendUiState
 
 @Composable
 fun SendDialog(
     balanceSats: String,
     calculateSendFee: (amount: String, recipient: String) -> String,
     onConfirm: (amount: String, recipient: String) -> Unit,
-    onPayLightning: (bolt11: String, onResult: (Result<String?>) -> Unit) -> Unit,
+    onStartLightningPayment: (bolt11: String) -> Unit,
     lightningOperation: String?,
+    lightningSendState: LightningSendUiState,
+    onClearLightningSendState: () -> Unit,
     onDismiss: () -> Unit,
     initialRecipient: String? = null,
     contacts: List<uniffi.oubli.ContactFfi> = emptyList(),
@@ -96,10 +100,7 @@ fun SendDialog(
     var recipient by rememberSaveable { mutableStateOf(initialRecipient ?: "") }
     var showScanner by rememberSaveable { mutableStateOf(false) }
     var lnNoAmountError by rememberSaveable { mutableStateOf(false) }
-    var swapProcessing by remember { mutableStateOf(false) }
-    var swapSuccessMessage by remember { mutableStateOf<String?>(null) }
-    var swapErrorMessage by remember { mutableStateOf<String?>(null) }
-    var showSendConfirmation by remember { mutableStateOf(false) }
+    var showSendConfirmation by rememberSaveable { mutableStateOf(false) }
 
     // Auto-process scanned code on first composition
     LaunchedEffect(initialRecipient) {
@@ -145,27 +146,6 @@ fun SendDialog(
         enteredAmount != null && availableBalance != null && totalAmount > availableBalance
     val canReview = recipient.isNotBlank() && amount.isNotBlank() && !insufficientFunds && !lightningInvoiceMissingAmount
 
-    fun startLightningPayment(bolt11: String) {
-        swapProcessing = true
-        swapSuccessMessage = null
-        swapErrorMessage = null
-        onPayLightning(bolt11) { result ->
-            swapProcessing = false
-            result
-                .onSuccess { txHash ->
-                    val msg = if (txHash != null && txHash.length > 16) {
-                        "Tx: ${txHash.take(10)}...${txHash.takeLast(6)}"
-                    } else {
-                        txHash ?: "Payment complete"
-                    }
-                    swapSuccessMessage = msg
-                }
-                .onFailure { e ->
-                    swapErrorMessage = e.message ?: "Unknown error"
-                }
-        }
-    }
-
     fun syncAmountWithLightningInvoice(value: String) {
         val parsedAmount = normalizeLightningInvoice(value)?.let(::parseBolt11AmountSats) ?: return
         if (amount != parsedAmount) {
@@ -183,17 +163,42 @@ fun SendDialog(
         amount = parsedAmount
     }
 
+    val swapProcessing = lightningSendState.status == LightningSendStatus.Processing
+    val swapSuccessMessage = lightningSendState.message.takeIf {
+        lightningSendState.status == LightningSendStatus.Success
+    }
+    val swapErrorMessage = lightningSendState.message.takeIf {
+        lightningSendState.status == LightningSendStatus.Error
+    }
+
+    val dismissSendDialog = {
+        if (!swapProcessing) {
+            onClearLightningSendState()
+        }
+        onDismiss()
+    }
+
     val bottomBar: (@Composable () -> Unit)? = when {
         swapProcessing -> null
-        swapSuccessMessage != null -> ({ TaskPrimaryButton(title = "Done", onClick = onDismiss) })
-        swapErrorMessage != null -> ({ TaskPrimaryButton(title = "Close", onClick = onDismiss) })
+        swapSuccessMessage != null -> ({
+            TaskPrimaryButton(
+                title = "Done",
+                onClick = dismissSendDialog,
+            )
+        })
+        swapErrorMessage != null -> ({
+            TaskPrimaryButton(
+                title = "Close",
+                onClick = dismissSendDialog,
+            )
+        })
         else -> ({
             TaskPrimaryButton(
                 title = if (hasLightningInvoice) "Pay Invoice" else "Send",
                 enabled = canReview,
                 onClick = {
                     if (normalizedLightningInvoice != null) {
-                        startLightningPayment(normalizedLightningInvoice)
+                        onStartLightningPayment(normalizedLightningInvoice)
                     } else {
                         showSendConfirmation = true
                     }
@@ -273,10 +278,10 @@ fun SendDialog(
             swapErrorMessage != null -> "Payment Failed"
             else -> "Send"
         },
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismissSendDialog,
         dismissEnabled = !swapProcessing,
         leadingActionLabel = "Close",
-        leadingAction = { onDismiss() },
+        leadingAction = dismissSendDialog,
         bottomBar = bottomBar,
     ) {
         when {

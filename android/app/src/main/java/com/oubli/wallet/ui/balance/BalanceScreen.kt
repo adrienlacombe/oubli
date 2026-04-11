@@ -57,6 +57,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.oubli.wallet.ui.QRScannerScreen
 import com.oubli.wallet.viewmodel.WalletViewModel
+import com.oubli.wallet.viewmodel.LightningReceiveUiState
+import com.oubli.wallet.viewmodel.LightningSendUiState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -88,11 +90,16 @@ fun BalanceScreen(
     onRefresh: () -> Unit,
     onSend: (amountSats: String, recipient: String) -> Unit,
     onCalculateSendFee: (amountSats: String, recipient: String) -> String = { _, _ -> "0" },
-    onPayLightning: (bolt11: String, onResult: (Result<String?>) -> Unit) -> Unit = { _, _ -> },
+    onStartLightningPayment: (bolt11: String) -> Unit = {},
     lightningOperation: String? = null,
-    onReceiveLightningCreate: (amountSats: ULong, onResult: (Result<uniffi.oubli.SwapQuoteFfi>) -> Unit) -> Unit = { _, _ -> },
-    onReceiveLightningWait: (swapId: String, onResult: (Result<Unit>) -> Unit) -> Unit = { _, _ -> },
-onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
+    lightningSendState: LightningSendUiState = LightningSendUiState(),
+    onClearLightningSendState: () -> Unit = {},
+    onCreateLightningReceiveInvoice: (amountSats: ULong) -> Unit = {},
+    lightningReceiveState: LightningReceiveUiState = LightningReceiveUiState(),
+    onRetryLightningReceiveWait: () -> Unit = {},
+    onClearLightningReceiveState: () -> Unit = {},
+    onMarkLightningReceiveExpired: () -> Unit = {},
+    onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
     contacts: List<ContactFfi> = emptyList(),
     onSaveContact: (ContactFfi) -> Unit = {},
     onDeleteContact: (String) -> Unit = {},
@@ -295,8 +302,10 @@ onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
                     onSend(amount, recipient)
                     showDialog = null
                 },
-                onPayLightning = onPayLightning,
+                onStartLightningPayment = onStartLightningPayment,
                 lightningOperation = lightningOperation,
+                lightningSendState = lightningSendState,
+                onClearLightningSendState = onClearLightningSendState,
                 onDismiss = { showDialog = null },
                 contacts = contacts,
                 satsToFiatRaw = satsToFiatRaw,
@@ -316,8 +325,10 @@ onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
                         onSend(amount, recipient)
                         showDialog = null
                     },
-                    onPayLightning = onPayLightning,
+                    onStartLightningPayment = onStartLightningPayment,
                     lightningOperation = lightningOperation,
+                    lightningSendState = lightningSendState,
+                    onClearLightningSendState = onClearLightningSendState,
                     onDismiss = { showDialog = null },
                     initialRecipient = scannedCode!!,
                     satsToFiatRaw = satsToFiatRaw,
@@ -341,8 +352,11 @@ onGetMnemonic: (onResult: (Result<String>) -> Unit) -> Unit = { _ -> },
             ReceiveDialog(
                 address = address,
                 publicKey = publicKey,
-                onReceiveLightningCreate = onReceiveLightningCreate,
-                onReceiveLightningWait = onReceiveLightningWait,
+                onCreateLightningReceiveInvoice = onCreateLightningReceiveInvoice,
+                lightningReceiveState = lightningReceiveState,
+                onRetryLightningReceiveWait = onRetryLightningReceiveWait,
+                onClearLightningReceiveState = onClearLightningReceiveState,
+                onMarkLightningReceiveExpired = onMarkLightningReceiveExpired,
                 onDismiss = { showDialog = null },
                 onShowMessage = onShowMessage,
                 satsToFiatRaw = satsToFiatRaw,

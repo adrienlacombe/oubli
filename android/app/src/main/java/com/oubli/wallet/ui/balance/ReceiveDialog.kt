@@ -38,9 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,15 +60,20 @@ import com.oubli.wallet.ui.util.lightningInvoiceShareText
 import com.oubli.wallet.ui.util.parseBolt11AmountSats
 import com.oubli.wallet.ui.util.shareText
 import com.oubli.wallet.ui.util.staticReceiveShareText
+import com.oubli.wallet.viewmodel.LightningReceiveUiState
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReceiveDialog(
     address: String,
     publicKey: String,
-    onReceiveLightningCreate: (amountSats: ULong, onResult: (Result<uniffi.oubli.SwapQuoteFfi>) -> Unit) -> Unit,
-    onReceiveLightningWait: (swapId: String, onResult: (Result<Unit>) -> Unit) -> Unit,
+    onCreateLightningReceiveInvoice: (amountSats: ULong) -> Unit,
+    lightningReceiveState: LightningReceiveUiState,
+    onRetryLightningReceiveWait: () -> Unit,
+    onClearLightningReceiveState: () -> Unit,
+    onMarkLightningReceiveExpired: () -> Unit,
     onDismiss: () -> Unit,
     onShowMessage: (String) -> Unit = {},
     satsToFiatRaw: (String) -> String? = { null },
@@ -79,32 +86,22 @@ fun ReceiveDialog(
     val scope = rememberCoroutineScope()
 
     // Oubli receive amount (optional)
-    var oubliAmountSats by remember { mutableStateOf("") }
+    var oubliAmountSats by rememberSaveable { mutableStateOf("") }
+    var starknetAmountSats by rememberSaveable { mutableStateOf("") }
 
-    // Lightning receive state
-    var lnAmountSats by remember { mutableStateOf("") }
-    var lnInvoice by remember { mutableStateOf<String?>(null) }
-    var lnSwapId by remember { mutableStateOf<String?>(null) }
-    var lnFee by remember { mutableStateOf<String?>(null) }
-    var lnCreating by remember { mutableStateOf(false) }
-    var lnWaiting by remember { mutableStateOf(false) }
-    var lnSuccess by remember { mutableStateOf(false) }
-    var lnError by remember { mutableStateOf<String?>(null) }
-    var lnExpiry by remember { mutableStateOf<ULong?>(null) }
-    var lnExpiryRemaining by remember { mutableStateOf(0) }
+    var lnAmountSats by rememberSaveable { mutableStateOf("") }
+    var lnExpiryRemaining by remember { mutableIntStateOf(0) }
 
     // Expiry countdown
-    LaunchedEffect(lnExpiry) {
-        val exp = lnExpiry ?: return@LaunchedEffect
+    LaunchedEffect(lightningReceiveState.expiryEpochSeconds, lightningReceiveState.isSuccess) {
+        val exp = lightningReceiveState.expiryEpochSeconds ?: return@LaunchedEffect
         while (true) {
             val now = System.currentTimeMillis() / 1000
-            val remaining = (exp.toLong() - now).toInt()
+            val remaining = (exp - now).toInt()
             if (remaining <= 0) {
                 lnExpiryRemaining = 0
-                if (!lnSuccess) {
-                    lnWaiting = false
-                    lnSwapId = null
-                    lnError = "Invoice expired. Create a new one."
+                if (!lightningReceiveState.isSuccess) {
+                    onMarkLightningReceiveExpired()
                 }
                 break
             }
@@ -113,21 +110,17 @@ fun ReceiveDialog(
         }
     }
 
-    fun startLnWait(swapId: String) {
-        lnError = null
-        lnWaiting = true
-        onReceiveLightningWait(swapId) { waitResult ->
-            lnWaiting = false
-            waitResult
-                .onSuccess { lnSuccess = true }
-                .onFailure { e -> lnError = e.message ?: "Failed to confirm Lightning payment" }
+    val dismissReceiveDialog = {
+        val shouldPreserveState = lightningReceiveState.swapId != null && !lightningReceiveState.isSuccess
+        if (!shouldPreserveState) {
+            onClearLightningReceiveState()
         }
+        onDismiss()
     }
 
     FullScreenTaskDialog(
         title = "Receive",
-        onDismissRequest = onDismiss,
-        dismissEnabled = !lnWaiting,
+        onDismissRequest = dismissReceiveDialog,
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -240,10 +233,9 @@ fun ReceiveDialog(
                     }
                     1 -> {
                         // Starknet tab with optional amount
-                        var snAmountSats by remember { mutableStateOf("") }
                         val value = address
-                        val shareValue = if (snAmountSats.isNotEmpty()) {
-                            "$value (requesting $snAmountSats sats)"
+                        val shareValue = if (starknetAmountSats.isNotEmpty()) {
+                            "$value (requesting $starknetAmountSats sats)"
                         } else {
                             value
                         }
@@ -276,8 +268,8 @@ fun ReceiveDialog(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             com.oubli.wallet.ui.components.DualAmountInput(
-                                satsAmount = snAmountSats,
-                                onSatsChange = { snAmountSats = it },
+                                satsAmount = starknetAmountSats,
+                                onSatsChange = { starknetAmountSats = it },
                                 satsToFiatRaw = satsToFiatRaw,
                                 fiatToSats = fiatToSats,
                                 fiatCurrency = fiatCurrency,
@@ -324,6 +316,9 @@ fun ReceiveDialog(
                     }
 
                     2 -> {
+                        val lightningInvoice = lightningReceiveState.invoice
+                        val lightningError = lightningReceiveState.errorMessage
+
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -332,7 +327,7 @@ fun ReceiveDialog(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Spacer(modifier = Modifier.height(24.dp))
-                            if (lnSuccess) {
+                            if (lightningReceiveState.isSuccess) {
                                 Icon(
                                     Icons.Filled.CheckCircle,
                                     contentDescription = null,
@@ -341,8 +336,8 @@ fun ReceiveDialog(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text("Payment Received!", style = MaterialTheme.typography.titleMedium)
-                            } else if (lnInvoice != null) {
-                                val qrBitmap = remember(lnInvoice) { generateQrBitmap(lnInvoice!!, 400) }
+                            } else if (lightningInvoice != null) {
+                                val qrBitmap = remember(lightningInvoice) { generateQrBitmap(lightningInvoice, 400) }
                                 if (qrBitmap != null) {
                                     Image(
                                         bitmap = qrBitmap.asImageBitmap(),
@@ -359,7 +354,7 @@ fun ReceiveDialog(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = lnInvoice!!.take(30) + "...",
+                                    text = if (lightningInvoice.length > 30) "${lightningInvoice.take(30)}..." else lightningInvoice,
                                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -371,7 +366,7 @@ fun ReceiveDialog(
                                     Button(
                                         onClick = {
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            clipboard.setPrimaryClip(ClipData.newPlainText("Invoice", lnInvoice))
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("Invoice", lightningInvoice))
                                             onShowMessage("Copied to clipboard")
                                         },
                                         modifier = Modifier.weight(1f),
@@ -387,8 +382,8 @@ fun ReceiveDialog(
                                                 chooserTitle = "Share Lightning invoice",
                                                 subject = "Pay me on Lightning with Oubli",
                                                 text = lightningInvoiceShareText(
-                                                    invoice = lnInvoice!!,
-                                                    amountSats = parseBolt11AmountSats(lnInvoice!!),
+                                                    invoice = lightningInvoice,
+                                                    amountSats = parseBolt11AmountSats(lightningInvoice),
                                                 ),
                                             )
                                         },
@@ -399,22 +394,22 @@ fun ReceiveDialog(
                                         Text("Share Invoice")
                                     }
                                 }
-                                if (lnError != null) {
+                                if (lightningError != null) {
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        text = lnError!!,
+                                        text = lightningError,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error,
                                         textAlign = TextAlign.Center,
                                     )
-                                    if (lnSwapId != null) {
+                                    if (lightningReceiveState.swapId != null) {
                                         Spacer(modifier = Modifier.height(12.dp))
-                                        Button(onClick = { startLnWait(lnSwapId!!) }) {
+                                        Button(onClick = onRetryLightningReceiveWait) {
                                             Text("Retry Payment Check")
                                         }
                                     }
                                 }
-                                if (lnWaiting) {
+                                if (lightningReceiveState.isWaiting) {
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -426,22 +421,22 @@ fun ReceiveDialog(
                                         val seconds = lnExpiryRemaining % 60
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "Expires in $minutes:${String.format("%02d", seconds)}",
+                                            text = "Expires in $minutes:${String.format(Locale.ROOT, "%02d", seconds)}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (lnExpiryRemaining < 60) MaterialTheme.colorScheme.error
                                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
-                                if (lnFee != null) {
+                                if (lightningReceiveState.feeSats != null) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        "Fee: ${lnFee} sats",
+                                        "Fee: ${lightningReceiveState.feeSats} sats",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                            } else if (lnCreating) {
+                            } else if (lightningReceiveState.isCreating) {
                                 Spacer(modifier = Modifier.height(48.dp))
                                 CircularProgressIndicator(modifier = Modifier.size(40.dp))
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -452,9 +447,9 @@ fun ReceiveDialog(
                                     textAlign = TextAlign.Center,
                                 )
                             } else {
-                                if (lnError != null) {
+                                if (lightningError != null) {
                                     Text(
-                                        lnError!!,
+                                        lightningError,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error,
                                         textAlign = TextAlign.Center,
@@ -480,23 +475,12 @@ fun ReceiveDialog(
                                     onClick = {
                                         val amount = lnAmountSats.toULongOrNull()
                                         if (amount != null && amount > 0u) {
-                                            lnError = null
-                                            lnCreating = true
-                                            onReceiveLightningCreate(amount) { result ->
-                                                lnCreating = false
-                                                result
-                                                    .onSuccess { quote ->
-                                                        lnInvoice = quote.lnInvoice
-                                                        lnSwapId = quote.swapId
-                                                        lnFee = quote.fee
-                                                        lnExpiry = quote.expiry
-                                                        startLnWait(quote.swapId)
-                                                    }
-                                                    .onFailure { e -> lnError = e.message }
-                                            }
+                                            onCreateLightningReceiveInvoice(amount)
                                         }
                                     },
-                                    enabled = lnAmountSats.toULongOrNull()?.let { it > 0u } == true,
+                                    enabled = !lightningReceiveState.isCreating &&
+                                        !lightningReceiveState.isWaiting &&
+                                        lnAmountSats.toULongOrNull()?.let { it > 0u } == true,
                                 ) {
                                     Text("Create Invoice")
                                 }

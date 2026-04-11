@@ -1,7 +1,13 @@
 package com.oubli.wallet.ui.util
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+
+private const val SENSITIVE_CLIPBOARD_CLEAR_DELAY_MS = 15_000L
 
 fun shareText(
     context: Context,
@@ -21,6 +27,25 @@ fun shareText(
 fun truncateAddress(value: String): String {
     if (value.length <= 28) return value
     return "${value.take(16)}...${value.takeLast(8)}"
+}
+
+fun copySensitiveTextToClipboard(
+    context: Context,
+    label: String,
+    text: String,
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+
+    Handler(Looper.getMainLooper()).postDelayed({
+        val current = clipboard.primaryClip
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+        if (current == text) {
+            clipboard.clearPrimaryClip()
+        }
+    }, SENSITIVE_CLIPBOARD_CLEAR_DELAY_MS)
 }
 
 fun staticReceiveShareText(

@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -63,67 +66,74 @@ fun ContactDetailDialog(
         title = { Text(if (isNew) "New Contact" else "Edit Contact") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = name.value,
-                    onValueChange = { name.value = it },
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    OutlinedTextField(
+                        value = name.value,
+                        onValueChange = { name.value = it },
+                        label = { Text("Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Addresses", style = MaterialTheme.typography.labelMedium)
-                Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Addresses", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                addresses.forEachIndexed { index, addr ->
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        OutlinedTextField(
-                            value = addr.address,
-                            onValueChange = { addresses[index] = addr.copy(address = it) },
-                            label = { Text("Address") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                                SegmentedButton(
-                                    selected = addr.type == AddressTypeFfi.OUBLI,
-                                    onClick = { addresses[index] = addr.copy(type = AddressTypeFfi.OUBLI) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                ) { Text("Oubli") }
-                                SegmentedButton(
-                                    selected = addr.type == AddressTypeFfi.STARKNET,
-                                    onClick = { addresses[index] = addr.copy(type = AddressTypeFfi.STARKNET) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                ) { Text("Starknet") }
-                            }
-                            if (addresses.size > 1) {
-                                IconButton(onClick = { addresses.removeAt(index) }) {
-                                    Icon(Icons.Filled.Delete, "Remove address", tint = MaterialTheme.colorScheme.error)
+                    addresses.forEachIndexed { index, addr ->
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            OutlinedTextField(
+                                value = addr.address,
+                                onValueChange = { addresses[index] = addr.copy(address = it) },
+                                label = { Text("Address") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                                    SegmentedButton(
+                                        selected = addr.type == AddressTypeFfi.OUBLI,
+                                        onClick = { addresses[index] = addr.copy(type = AddressTypeFfi.OUBLI) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    ) { Text("Oubli") }
+                                    SegmentedButton(
+                                        selected = addr.type == AddressTypeFfi.STARKNET,
+                                        onClick = { addresses[index] = addr.copy(type = AddressTypeFfi.STARKNET) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    ) { Text("Starknet") }
+                                }
+                                if (addresses.size > 1) {
+                                    IconButton(onClick = { addresses.removeAt(index) }) {
+                                        Icon(Icons.Filled.Delete, "Remove address", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
                     }
+
+                    TextButton(onClick = { addresses.add(EditableAddress()) }) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Text("Add Address")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = notes.value,
+                        onValueChange = { notes.value = it },
+                        label = { Text("Notes (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                    )
                 }
-
-                TextButton(onClick = { addresses.add(EditableAddress()) }) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Text("Add Address")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = notes.value,
-                    onValueChange = { notes.value = it },
-                    label = { Text("Notes (optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4,
-                )
             }
         },
         confirmButton = {

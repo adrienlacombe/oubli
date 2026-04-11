@@ -26,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId = "com.oubli.wallet"
-        minSdk = 26
+        minSdk = 35
         targetSdk = 36
         versionCode = 70
         versionName = "0.1.69"

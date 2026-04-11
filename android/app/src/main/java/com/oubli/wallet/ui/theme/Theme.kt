@@ -2,7 +2,9 @@ package com.oubli.wallet.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
 
 // Oubli Obsidian Design System
@@ -63,6 +65,25 @@ val OubliPending = Color(0xFFFFB874)
 val OubliSuccessBg = Color(0xFF1B3A1B)
 val OubliErrorBg = Color(0xFF3A1B1B)
 
+private val OubliLightBackground = Color(0xFFF7F5F3)
+private val OubliLightSurface = Color(0xFFFFFBFF)
+private val OubliLightSurfaceDim = Color(0xFFE2DDD8)
+private val OubliLightSurfaceBright = Color(0xFFFFFFFF)
+private val OubliLightSurfaceContainerLowest = Color(0xFFFFFFFF)
+private val OubliLightSurfaceContainerLow = Color(0xFFF6F1EC)
+private val OubliLightSurfaceContainer = Color(0xFFF0EBE6)
+private val OubliLightSurfaceContainerHigh = Color(0xFFEAE4DF)
+private val OubliLightSurfaceContainerHighest = Color(0xFFE3DED9)
+private val OubliLightSurfaceVariant = Color(0xFFE9DED2)
+private val OubliLightOnSurface = Color(0xFF1E1B19)
+private val OubliLightOnSurfaceVariant = Color(0xFF5B4F45)
+private val OubliLightOnBackground = Color(0xFF1E1B19)
+private val OubliLightOutline = Color(0xFF8A776A)
+private val OubliLightOutlineVariant = Color(0xFFD0C4B8)
+private val OubliLightInverseSurface = Color(0xFF313030)
+private val OubliLightInverseOnSurface = Color(0xFFF6F1EC)
+private val OubliLightInversePrimary = Color(0xFFADC6FF)
+
 private val OubliDarkColorScheme = darkColorScheme(
     primary = OubliPrimary,
     onPrimary = OubliOnPrimary,
@@ -99,12 +120,50 @@ private val OubliDarkColorScheme = darkColorScheme(
     surfaceContainerHighest = OubliSurfaceContainerHighest,
 )
 
+private val OubliLightColorScheme = lightColorScheme(
+    primary = OubliPrimaryContainer,
+    onPrimary = Color.White,
+    primaryContainer = OubliPrimary,
+    onPrimaryContainer = OubliOnPrimary,
+    secondary = OubliSecondaryContainer,
+    onSecondary = Color.White,
+    secondaryContainer = OubliSecondary,
+    onSecondaryContainer = OubliOnSecondary,
+    tertiary = OubliTertiaryContainer,
+    onTertiary = Color.White,
+    tertiaryContainer = OubliTertiary,
+    onTertiaryContainer = OubliOnTertiary,
+    error = OubliErrorContainer,
+    onError = Color.White,
+    errorContainer = OubliError,
+    onErrorContainer = OubliOnError,
+    background = OubliLightBackground,
+    onBackground = OubliLightOnBackground,
+    surface = OubliLightSurface,
+    onSurface = OubliLightOnSurface,
+    surfaceVariant = OubliLightSurfaceVariant,
+    onSurfaceVariant = OubliLightOnSurfaceVariant,
+    outline = OubliLightOutline,
+    outlineVariant = OubliLightOutlineVariant,
+    inverseSurface = OubliLightInverseSurface,
+    inverseOnSurface = OubliLightInverseOnSurface,
+    inversePrimary = OubliLightInversePrimary,
+    surfaceDim = OubliLightSurfaceDim,
+    surfaceBright = OubliLightSurfaceBright,
+    surfaceContainerLowest = OubliLightSurfaceContainerLowest,
+    surfaceContainerLow = OubliLightSurfaceContainerLow,
+    surfaceContainer = OubliLightSurfaceContainer,
+    surfaceContainerHigh = OubliLightSurfaceContainerHigh,
+    surfaceContainerHighest = OubliLightSurfaceContainerHighest,
+)
+
 @Composable
 fun OubliTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = OubliDarkColorScheme,
+        colorScheme = if (darkTheme) OubliDarkColorScheme else OubliLightColorScheme,
         content = content,
     )
 }

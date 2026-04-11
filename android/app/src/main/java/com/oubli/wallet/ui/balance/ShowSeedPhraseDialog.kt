@@ -1,8 +1,5 @@
 package com.oubli.wallet.ui.balance
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.oubli.wallet.ui.components.FullScreenTaskDialog
 import com.oubli.wallet.ui.components.TaskPrimaryButton
+import com.oubli.wallet.ui.util.copySensitiveTextToClipboard
 
 @Composable
 fun ShowSeedPhraseDialog(
@@ -95,9 +93,12 @@ fun ShowSeedPhraseDialog(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Seed phrase", seedWords!!.joinToString(" ")))
-                    onShowMessage("Copied to clipboard")
+                    copySensitiveTextToClipboard(
+                        context = context,
+                        label = "Seed phrase",
+                        text = seedWords!!.joinToString(" "),
+                    )
+                    onShowMessage("Copied to clipboard. Clears in 15 seconds.")
                 }) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))

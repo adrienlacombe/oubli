@@ -23,6 +23,29 @@ data class WalletUiState(
     val userMessage: UserMessage? = null,
 )
 
+enum class LightningSendStatus {
+    Idle,
+    Processing,
+    Success,
+    Error,
+}
+
+data class LightningSendUiState(
+    val status: LightningSendStatus = LightningSendStatus.Idle,
+    val message: String? = null,
+)
+
+data class LightningReceiveUiState(
+    val invoice: String? = null,
+    val swapId: String? = null,
+    val feeSats: String? = null,
+    val expiryEpochSeconds: Long? = null,
+    val isCreating: Boolean = false,
+    val isWaiting: Boolean = false,
+    val isSuccess: Boolean = false,
+    val errorMessage: String? = null,
+)
+
 /**
  * Sealed hierarchy representing the current screen the user should see.
  */

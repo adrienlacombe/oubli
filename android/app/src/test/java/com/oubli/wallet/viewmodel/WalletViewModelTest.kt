@@ -1,6 +1,7 @@
 package com.oubli.wallet.viewmodel
 
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.oubli.wallet.data.WalletRepository
 import kotlinx.coroutines.delay
@@ -41,7 +42,7 @@ class WalletViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeRepository = FakeWalletRepository()
-        viewModel = WalletViewModel(fakeRepository, testDispatcher)
+        viewModel = WalletViewModel(fakeRepository, testDispatcher, SavedStateHandle())
         viewModel.activityPollingEnabled = false
     }
 

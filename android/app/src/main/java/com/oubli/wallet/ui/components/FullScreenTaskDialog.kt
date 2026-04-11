@@ -4,12 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,14 +46,13 @@ fun FullScreenTaskDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize(),
             ) {
+                // Title bar
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Text(
@@ -67,6 +70,7 @@ fun FullScreenTaskDialog(
                     }
                 }
                 HorizontalDivider()
+                // Content
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -74,13 +78,16 @@ fun FullScreenTaskDialog(
                 ) {
                     content()
                 }
+                // Bottom bar
                 if (bottomBar != null) {
                     HorizontalDivider()
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface)
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp),
                     ) {
                         bottomBar()
                     }
@@ -100,7 +107,15 @@ fun TaskPrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
     ) {
         Text(title)
         if (trailingIcon != null) {

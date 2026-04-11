@@ -47,6 +47,8 @@ fun MainScreen(
 
     val state by walletViewModel.uiState.collectAsStateWithLifecycle()
     val lightningOperation by walletViewModel.lightningOperation.collectAsStateWithLifecycle()
+    val lightningSendState by walletViewModel.lightningSendState.collectAsStateWithLifecycle()
+    val lightningReceiveState by walletViewModel.lightningReceiveState.collectAsStateWithLifecycle()
 
     // Show user messages via snackbar
     val userMessage = state.userMessage
@@ -126,10 +128,15 @@ fun MainScreen(
                         onCalculateSendFee = { amount, recipient ->
                             walletViewModel.calculateSendFee(amount, recipient)
                         },
-                        onPayLightning = { bolt11, onResult -> walletViewModel.payLightningWithCallback(bolt11, onResult) },
+                        onStartLightningPayment = { bolt11 -> walletViewModel.startLightningPayment(bolt11) },
                         lightningOperation = lightningOperation,
-                        onReceiveLightningCreate = { amount, onResult -> walletViewModel.receiveLightningCreateInvoice(amount, onResult) },
-                        onReceiveLightningWait = { swapId, onResult -> walletViewModel.receiveLightningWait(swapId, onResult) },
+                        lightningSendState = lightningSendState,
+                        onClearLightningSendState = { walletViewModel.clearLightningSendState() },
+                        onCreateLightningReceiveInvoice = { amount -> walletViewModel.startLightningReceiveInvoice(amount) },
+                        lightningReceiveState = lightningReceiveState,
+                        onRetryLightningReceiveWait = { walletViewModel.retryLightningReceiveWait() },
+                        onClearLightningReceiveState = { walletViewModel.clearLightningReceiveState() },
+                        onMarkLightningReceiveExpired = { walletViewModel.markLightningReceiveExpired() },
                         onGetMnemonic = { onResult -> walletViewModel.getMnemonic(onResult) },
                         contacts = screen.contacts,
                         onSaveContact = { walletViewModel.saveContact(it) },

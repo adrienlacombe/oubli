@@ -1,6 +1,7 @@
 package com.oubli.wallet.viewmodel
 
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.annotation.VisibleForTesting
@@ -22,6 +23,7 @@ import uniffi.oubli.OubliException
 import uniffi.oubli.WalletStateFfi
 import javax.inject.Inject
 import javax.inject.Qualifier
+import java.util.Locale
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -31,6 +33,7 @@ annotation class IoDispatcher
 class WalletViewModel @Inject constructor(
     private val repository: WalletRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     @VisibleForTesting
@@ -43,7 +46,70 @@ class WalletViewModel @Inject constructor(
     private val _lightningOperation = MutableStateFlow<String?>(null)
     val lightningOperation: StateFlow<String?> = _lightningOperation.asStateFlow()
 
+    private val _lightningSendState = MutableStateFlow(loadLightningSendState())
+    val lightningSendState: StateFlow<LightningSendUiState> = _lightningSendState.asStateFlow()
+
+    private val _lightningReceiveState = MutableStateFlow(loadLightningReceiveState())
+    val lightningReceiveState: StateFlow<LightningReceiveUiState> = _lightningReceiveState.asStateFlow()
+
     private var activityPollingJob: Job? = null
+    private var lightningReceiveWaitJob: Job? = null
+
+    private fun loadLightningSendState(): LightningSendUiState {
+        val restoredStatus = savedStateHandle.get<String>(KEY_LIGHTNING_SEND_STATUS)
+            ?.let { runCatching { LightningSendStatus.valueOf(it) }.getOrNull() }
+            ?: LightningSendStatus.Idle
+        val restoredMessage = savedStateHandle.get<String>(KEY_LIGHTNING_SEND_MESSAGE)
+
+        return when (restoredStatus) {
+            LightningSendStatus.Processing -> LightningSendUiState(
+                status = LightningSendStatus.Error,
+                message = "Lightning payment was interrupted. Check activity before retrying.",
+            )
+            else -> LightningSendUiState(
+                status = restoredStatus,
+                message = restoredMessage,
+            )
+        }
+    }
+
+    private fun loadLightningReceiveState(): LightningReceiveUiState {
+        val wasCreating = savedStateHandle.get<Boolean>(KEY_LIGHTNING_RECEIVE_CREATING) ?: false
+        val wasWaiting = savedStateHandle.get<Boolean>(KEY_LIGHTNING_RECEIVE_WAITING) ?: false
+
+        return LightningReceiveUiState(
+            invoice = savedStateHandle.get<String>(KEY_LIGHTNING_RECEIVE_INVOICE),
+            swapId = savedStateHandle.get<String>(KEY_LIGHTNING_RECEIVE_SWAP_ID),
+            feeSats = savedStateHandle.get<String>(KEY_LIGHTNING_RECEIVE_FEE),
+            expiryEpochSeconds = savedStateHandle.get<Long>(KEY_LIGHTNING_RECEIVE_EXPIRY),
+            isCreating = false,
+            isWaiting = false,
+            isSuccess = savedStateHandle.get<Boolean>(KEY_LIGHTNING_RECEIVE_SUCCESS) ?: false,
+            errorMessage = when {
+                wasCreating -> "Invoice creation was interrupted. Create a new one."
+                wasWaiting -> "Payment check was interrupted. Retry when you're ready."
+                else -> savedStateHandle.get<String>(KEY_LIGHTNING_RECEIVE_ERROR)
+            },
+        )
+    }
+
+    private fun setLightningSendState(state: LightningSendUiState) {
+        _lightningSendState.value = state
+        savedStateHandle[KEY_LIGHTNING_SEND_STATUS] = state.status.name
+        savedStateHandle[KEY_LIGHTNING_SEND_MESSAGE] = state.message
+    }
+
+    private fun setLightningReceiveState(state: LightningReceiveUiState) {
+        _lightningReceiveState.value = state
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_INVOICE] = state.invoice
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_SWAP_ID] = state.swapId
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_FEE] = state.feeSats
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_EXPIRY] = state.expiryEpochSeconds
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_CREATING] = state.isCreating
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_WAITING] = state.isWaiting
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_SUCCESS] = state.isSuccess
+        savedStateHandle[KEY_LIGHTNING_RECEIVE_ERROR] = state.errorMessage
+    }
 
     // ---- Initialization ----
 
@@ -346,8 +412,8 @@ class WalletViewModel @Inject constructor(
         val satsVal = sats.toDoubleOrNull() ?: return null
         val fiat = satsVal * price / 100_000_000.0
         val symbol = fiatSymbol(screen.fiatCurrency)
-        return if (fiat < 0.01) String.format("${symbol}%.4f", fiat)
-        else String.format("${symbol}%.2f", fiat)
+        return if (fiat < 0.01) String.format(Locale.ROOT, "${symbol}%.4f", fiat)
+        else String.format(Locale.ROOT, "${symbol}%.2f", fiat)
     }
 
     /** Raw numeric fiat value (no symbol) for a given sats amount. */
@@ -356,8 +422,8 @@ class WalletViewModel @Inject constructor(
         val price = screen.btcFiatPrice ?: return null
         val satsVal = sats.toDoubleOrNull()?.takeIf { it > 0 } ?: return null
         val fiat = satsVal * price / 100_000_000.0
-        return if (fiat < 0.01) String.format("%.4f", fiat)
-        else String.format("%.2f", fiat)
+        return if (fiat < 0.01) String.format(Locale.ROOT, "%.4f", fiat)
+        else String.format(Locale.ROOT, "%.2f", fiat)
     }
 
     /** Convert a fiat amount string to sats (rounded to nearest integer). */
@@ -370,6 +436,17 @@ class WalletViewModel @Inject constructor(
     }
 
     companion object {
+        private const val KEY_LIGHTNING_SEND_STATUS = "lightning_send_status"
+        private const val KEY_LIGHTNING_SEND_MESSAGE = "lightning_send_message"
+        private const val KEY_LIGHTNING_RECEIVE_INVOICE = "lightning_receive_invoice"
+        private const val KEY_LIGHTNING_RECEIVE_SWAP_ID = "lightning_receive_swap_id"
+        private const val KEY_LIGHTNING_RECEIVE_FEE = "lightning_receive_fee"
+        private const val KEY_LIGHTNING_RECEIVE_EXPIRY = "lightning_receive_expiry"
+        private const val KEY_LIGHTNING_RECEIVE_CREATING = "lightning_receive_creating"
+        private const val KEY_LIGHTNING_RECEIVE_WAITING = "lightning_receive_waiting"
+        private const val KEY_LIGHTNING_RECEIVE_SUCCESS = "lightning_receive_success"
+        private const val KEY_LIGHTNING_RECEIVE_ERROR = "lightning_receive_error"
+
         val supportedFiatCurrencies = listOf(
             "usd" to "US Dollar", "eur" to "Euro", "gbp" to "British Pound",
             "jpy" to "Japanese Yen", "cad" to "Canadian Dollar", "aud" to "Australian Dollar",
@@ -417,6 +494,54 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun startLightningPayment(bolt11: String) {
+        if (_lightningSendState.value.status == LightningSendStatus.Processing) return
+
+        setLightningSendState(
+            LightningSendUiState(
+                status = LightningSendStatus.Processing,
+                message = null,
+            )
+        )
+
+        viewModelScope.launch(ioDispatcher) {
+            val pollJob = launch {
+                while (true) {
+                    delay(1000)
+                    try {
+                        _lightningOperation.value = repository.getState().operation
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val result = runCatching<String?> { repository.payLightning(bolt11) }
+            pollJob.cancel()
+            _lightningOperation.value = null
+
+            if (result.isSuccess) {
+                refreshState()
+                loadActivity()
+                setLightningSendState(
+                    LightningSendUiState(
+                        status = LightningSendStatus.Success,
+                        message = lightningSuccessMessage(result.getOrNull()),
+                    )
+                )
+            } else {
+                setLightningSendState(
+                    LightningSendUiState(
+                        status = LightningSendStatus.Error,
+                        message = result.exceptionOrNull()?.message ?: "Unknown error",
+                    )
+                )
+            }
+        }
+    }
+
+    fun clearLightningSendState() {
+        setLightningSendState(LightningSendUiState())
+    }
+
     fun payLightningWithCallback(bolt11: String, onResult: (Result<String?>) -> Unit) {
         viewModelScope.launch(ioDispatcher) {
             val pollJob = launch {
@@ -441,6 +566,60 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun startLightningReceiveInvoice(amountSats: ULong) {
+        setLightningReceiveState(
+            LightningReceiveUiState(
+                isCreating = true,
+                errorMessage = null,
+            )
+        )
+
+        viewModelScope.launch(ioDispatcher) {
+            val result = runCatching { repository.swapLnToWbtc(amountSats, false) }
+            if (result.isSuccess) {
+                val quote = result.getOrThrow()
+                setLightningReceiveState(
+                    LightningReceiveUiState(
+                        invoice = quote.lnInvoice,
+                        swapId = quote.swapId,
+                        feeSats = quote.fee,
+                        expiryEpochSeconds = quote.expiry.toLong(),
+                    )
+                )
+                waitForLightningReceive(quote.swapId)
+            } else {
+                setLightningReceiveState(
+                    LightningReceiveUiState(
+                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to create invoice",
+                    )
+                )
+            }
+        }
+    }
+
+    fun retryLightningReceiveWait() {
+        val swapId = _lightningReceiveState.value.swapId ?: return
+        waitForLightningReceive(swapId)
+    }
+
+    fun clearLightningReceiveState() {
+        lightningReceiveWaitJob?.cancel()
+        lightningReceiveWaitJob = null
+        setLightningReceiveState(LightningReceiveUiState())
+    }
+
+    fun markLightningReceiveExpired() {
+        val state = _lightningReceiveState.value
+        if (state.isSuccess) return
+        lightningReceiveWaitJob?.cancel()
+        lightningReceiveWaitJob = null
+        setLightningReceiveState(
+            LightningReceiveUiState(
+                errorMessage = "Invoice expired. Create a new one.",
+            )
+        )
+    }
+
     fun receiveLightningCreateInvoice(amountSats: ULong, onResult: (Result<uniffi.oubli.SwapQuoteFfi>) -> Unit) {
         viewModelScope.launch(ioDispatcher) {
             val result = runCatching { repository.swapLnToWbtc(amountSats, false) }
@@ -456,6 +635,45 @@ class WalletViewModel @Inject constructor(
                 loadActivity()
             }
             launch(Dispatchers.Main) { onResult(result) }
+        }
+    }
+
+    private fun waitForLightningReceive(swapId: String) {
+        if (_lightningReceiveState.value.isWaiting) return
+
+        lightningReceiveWaitJob?.cancel()
+        lightningReceiveWaitJob = viewModelScope.launch(ioDispatcher) {
+            setLightningReceiveState(
+                _lightningReceiveState.value.copy(
+                    isCreating = false,
+                    isWaiting = true,
+                    errorMessage = null,
+                )
+            )
+
+            val result = runCatching { repository.receiveLightningWait(swapId) }
+            val current = _lightningReceiveState.value
+
+            if (result.isSuccess) {
+                refreshState()
+                loadActivity()
+                setLightningReceiveState(
+                    current.copy(
+                        isCreating = false,
+                        isWaiting = false,
+                        isSuccess = true,
+                        errorMessage = null,
+                    )
+                )
+            } else {
+                setLightningReceiveState(
+                    current.copy(
+                        isCreating = false,
+                        isWaiting = false,
+                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to confirm Lightning payment",
+                    )
+                )
+            }
         }
     }
 
@@ -651,6 +869,14 @@ class WalletViewModel @Inject constructor(
 
     private fun emitSuccess(message: String) {
         _uiState.update { it.copy(userMessage = UserMessage(text = message, isError = false)) }
+    }
+
+    private fun lightningSuccessMessage(txHash: String?): String {
+        return if (txHash != null && txHash.length > 16) {
+            "Tx: ${txHash.take(10)}...${txHash.takeLast(6)}"
+        } else {
+            txHash ?: "Payment complete"
+        }
     }
 
     private fun biometricUnlockErrorMessage(throwable: Throwable): String {

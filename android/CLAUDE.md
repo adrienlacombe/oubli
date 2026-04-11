@@ -21,5 +21,5 @@ Repo-wide workflow lives in [`README.md`](../README.md) and [`AGENTS.md`](../AGE
 - **Always source `.mainnet.env` before building**: `set -a && source .mainnet.env && set +a` (from repo root). `build.rs` XOR-encodes RPC URLs, paymaster keys, and fee config at compile time. Without this, secrets are empty and the wallet fails with "invalid rpc url" on launch.
 - Debug: `cd android && ./gradlew assembleDebug`
 - Release: `cd android && OUBLI_KEYSTORE_PASSWORD="..." ./gradlew assembleRelease`
-- ABI: arm64-v8a only, minSdk=26, targetSdk=36, compileSdk=36
+- ABI: arm64-v8a only, minSdk=35, targetSdk=36, compileSdk=36
 - ProGuard enabled for release (isMinifyEnabled=true, isShrinkResources=true)

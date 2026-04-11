@@ -38,12 +38,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,6 +49,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.oubli.wallet.ui.util.copySensitiveTextToClipboard
+import kotlinx.coroutines.delay
+import java.util.Locale
 
 @Composable
 fun OnboardingScreen(
@@ -105,7 +105,10 @@ fun OnboardingScreen(
 @Composable
 private fun WelcomeStep(onGetStarted: () -> Unit, onRestore: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -138,7 +141,10 @@ private fun DisclaimerStep(onContinue: () -> Unit) {
     var accepted by rememberSaveable { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -196,14 +202,13 @@ private fun DisclaimerStep(onContinue: () -> Unit) {
 @Composable
 private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit, onShowMessage: (String) -> Unit = {}) {
     val words = remember(mnemonic) { mnemonic.split(" ") }
-    val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
     var showClipboardWarning by remember { mutableStateOf(false) }
 
     LaunchedEffect(copied) {
         if (copied) {
-            delay(2000)
+            delay(15_000)
             copied = false
         }
     }
@@ -265,14 +270,18 @@ private fun MnemonicDisplayStep(mnemonic: String, onContinue: () -> Unit, onShow
                 onDismissRequest = { showClipboardWarning = false },
                 title = { Text("Clipboard Warning") },
                 text = {
-                    Text("Your seed phrase will be copied to the clipboard, where other apps may be able to read it. Only do this if you intend to paste it immediately and clear your clipboard afterward.")
+                    Text("Your seed phrase will be copied to the clipboard, where other apps may be able to read it. Only do this if you intend to paste it immediately. Oubli will clear the clipboard after 15 seconds.")
                 },
                 confirmButton = {
                     TextButton(onClick = {
                         showClipboardWarning = false
-                        clipboardManager.setText(AnnotatedString(mnemonic))
+                        copySensitiveTextToClipboard(
+                            context = context,
+                            label = "Seed phrase",
+                            text = mnemonic,
+                        )
                         copied = true
-                        onShowMessage("Copied to clipboard")
+                        onShowMessage("Copied to clipboard. Clears in 15 seconds.")
                     }) {
                         Text("Copy Anyway")
                     }
@@ -307,7 +316,7 @@ private fun WordChip(index: Int, word: String, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = String.format("%02d.", index),
+                text = String.format(Locale.ROOT, "%02d.", index),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.width(28.dp),
@@ -330,7 +339,10 @@ private fun MnemonicRestoreStep(
     var phraseInput by rememberSaveable { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
