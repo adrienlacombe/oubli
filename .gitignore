@@ -1,0 +1,43 @@
+# Secrets
+.env
+.sepolia.env
+.mainnet.env
+*.jks
+*.jks.old
+*.keystore
+
+# Rust build
+target/
+
+# Android build
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/local.properties
+
+# Native binaries (rebuilt from source)
+android/app/src/main/jniLibs/
+
+# iOS build
+ios/DerivedData/
+ios/build/
+ios/*.xcworkspace/xcuserdata/
+**/xcuserdata/
+ios/Pods/
+
+# IDE
+.idea/
+.vscode/
+*.xcuserdata/
+*.swp
+*~
+.DS_Store
+
+# Swap JS bundle (rebuilt from source)
+oubli-swap-js/node_modules/
+oubli-swap-js/dist/
+
+# Test env files (contain funded mnemonics)
+crates/oubli-wallet/tests/sepolia.env
+crates/oubli-wallet/tests/mainnet.env

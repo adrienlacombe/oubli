@@ -1,0 +1,12 @@
+[package]
+name = "oubli-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oubli-auth = { workspace = true }
+aes-gcm = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
