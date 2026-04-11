@@ -6,6 +6,7 @@
 
 pub mod error;
 pub mod runtime;
+pub mod telemetry;
 pub mod types;
 
 use std::sync::Arc;

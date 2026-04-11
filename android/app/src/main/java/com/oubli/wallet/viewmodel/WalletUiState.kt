@@ -12,6 +12,7 @@ data class UserMessage(
     val id: Long = System.nanoTime(),
     val text: String,
     val isError: Boolean = false,
+    val diagnostics: String? = null,
 )
 
 /**
@@ -45,13 +46,16 @@ sealed interface ScreenState {
         val activity: List<ActivityEventFfi> = emptyList(),
         val contacts: List<ContactFfi> = emptyList(),
         val isRefreshing: Boolean = false,
-        val autoFundError: String? = null,
+        val autoFundIssue: com.oubli.wallet.ui.util.SupportIssue? = null,
         val activityContactNames: Map<String, String> = emptyMap(),
     ) : ScreenState
 
     data class Processing(val address: String, val operation: String) : ScreenState
 
-    data class Error(val message: String) : ScreenState
+    data class Error(
+        val message: String,
+        val diagnostics: String? = null,
+    ) : ScreenState
 
     data class SeedBackup(val backupState: SeedBackupStateFfi) : ScreenState
 

@@ -680,16 +680,24 @@ struct BalanceView: View {
     @ViewBuilder
     private var autoFundErrorBanner: some View {
         if let error = viewModel.autoFundError {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundColor(.white)
                         .accessibilityHidden(true)
-                    Text("Auto-fund error (tap to copy)")
+                    Text("Auto-fund Needs Attention")
                         .font(.caption.weight(.bold))
                 }
                 Text(error)
                     .font(.caption2)
+                if let diagnostics = viewModel.autoFundDiagnostics {
+                    ShareLink(item: diagnostics) {
+                        Label("Share Diagnostics", systemImage: "square.and.arrow.up")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                }
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -697,15 +705,8 @@ struct BalanceView: View {
             .background(Color.oubliError.opacity(0.85))
             .cornerRadius(12)
             .padding(.horizontal, 24)
-            .onTapGesture {
-                UIPasteboard.general.string = error
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation { toastMessage = "Copied to clipboard" }
-            }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Auto-fund error: \(error)")
-            .accessibilityHint("Double tap to copy error to clipboard")
-            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Auto-fund needs attention. \(error)")
         }
     }
 

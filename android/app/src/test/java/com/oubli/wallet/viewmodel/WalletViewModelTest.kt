@@ -41,7 +41,8 @@ class WalletViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeRepository = FakeWalletRepository()
-        viewModel = WalletViewModel(fakeRepository)
+        viewModel = WalletViewModel(fakeRepository, testDispatcher)
+        viewModel.activityPollingEnabled = false
     }
 
     @After
@@ -57,52 +58,65 @@ class WalletViewModelTest {
     }
 
     @Test
-    fun `toggleBalanceHidden toggles hidden state in Ready`() = runTest(testDispatcher) {
-        // Put repository into Ready state
-        fakeRepository.stateToReturn = readyState()
-        fakeRepository.initialized = true
+    fun `toggleBalanceHidden toggles hidden state in Ready`() {
+        setScreenState(
+            ScreenState.Ready(
+                address = "0xabc",
+                publicKey = "0xdef",
+                balanceSats = "123",
+                pendingSats = "0",
+            ),
+        )
 
-        viewModel.uiState.test {
-            // Initial Loading
-            assertEquals(ScreenState.Loading, awaitItem().screenState)
+        val ready = viewModel.uiState.value.screenState as ScreenState.Ready
+        assertEquals(false, ready.isBalanceHidden)
 
-            // Trigger refresh to move to Ready
-            viewModel.refreshBalance()
+        viewModel.toggleBalanceHidden()
+        val toggled = viewModel.uiState.value.screenState as ScreenState.Ready
+        assertEquals(true, toggled.isBalanceHidden)
 
-            // Wait until we get a Ready state
-            val readyItem = awaitUntil { it.screenState is ScreenState.Ready }
-            val ready = readyItem.screenState as ScreenState.Ready
-            assertEquals(false, ready.isBalanceHidden)
-
-            // Toggle
-            viewModel.toggleBalanceHidden()
-            val toggled = awaitUntil { (it.screenState as? ScreenState.Ready)?.isBalanceHidden == true }
-            assertEquals(true, (toggled.screenState as ScreenState.Ready).isBalanceHidden)
-
-            // Toggle back
-            viewModel.toggleBalanceHidden()
-            val toggledBack = awaitUntil { (it.screenState as? ScreenState.Ready)?.isBalanceHidden == false }
-            assertEquals(false, (toggledBack.screenState as ScreenState.Ready).isBalanceHidden)
-
-            cancelAndIgnoreRemainingEvents()
-        }
+        viewModel.toggleBalanceHidden()
+        val toggledBack = viewModel.uiState.value.screenState as ScreenState.Ready
+        assertEquals(false, toggledBack.isBalanceHidden)
     }
 
     @Test
-    fun `toggleCurrency toggles USD in Ready`() = runTest(testDispatcher) {
+    fun `toggleCurrency toggles USD in Ready`() {
+        setScreenState(
+            ScreenState.Ready(
+                address = "0xabc",
+                publicKey = "0xdef",
+                balanceSats = "123",
+                pendingSats = "0",
+            ),
+        )
+
+        val ready = viewModel.uiState.value.screenState as ScreenState.Ready
+        assertEquals(false, ready.showFiat)
+        viewModel.toggleCurrency()
+        val toggled = viewModel.uiState.value.screenState as ScreenState.Ready
+        assertEquals(true, toggled.showFiat)
+    }
+
+    @Test
+    fun `toggleCurrency refreshes BTC price when showing fiat without cached price`() = runTest(testDispatcher) {
         fakeRepository.stateToReturn = readyState()
         fakeRepository.initialized = true
+        fakeRepository.btcPricesByCurrency["usd"] = 65432.1
 
         viewModel.uiState.test {
             assertEquals(ScreenState.Loading, awaitItem().screenState)
 
             viewModel.refreshBalance()
-            val readyItem = awaitUntil { it.screenState is ScreenState.Ready }
-            assertEquals(false, (readyItem.screenState as ScreenState.Ready).showFiat)
+            awaitUntil { it.screenState is ScreenState.Ready }
 
             viewModel.toggleCurrency()
-            val toggled = awaitUntil { (it.screenState as? ScreenState.Ready)?.showFiat == true }
-            assertEquals(true, (toggled.screenState as ScreenState.Ready).showFiat)
+            val ready = awaitUntil { (it.screenState as? ScreenState.Ready)?.btcFiatPrice == 65432.1 }
+                .screenState as ScreenState.Ready
+
+            assertEquals(true, ready.showFiat)
+            assertEquals(65432.1, ready.btcFiatPrice)
+            assertEquals(listOf("usd"), fakeRepository.btcPriceRequests)
 
             cancelAndIgnoreRemainingEvents()
         }
@@ -314,10 +328,12 @@ class WalletViewModelTest {
 
             val finalState = awaitUntil {
                 val ready = it.screenState as? ScreenState.Ready
-                it.userMessage?.text?.contains("Refresh failed") == true && ready?.isRefreshing == false
+                it.userMessage != null && ready?.isRefreshing == false
             }
 
             assertTrue(finalState.userMessage!!.isError)
+            assertEquals("Something went wrong. Try again.", finalState.userMessage!!.text)
+            assertNotNull(finalState.userMessage!!.diagnostics)
             assertFalse((finalState.screenState as ScreenState.Ready).isRefreshing)
 
             cancelAndIgnoreRemainingEvents()
@@ -380,7 +396,11 @@ class WalletViewModelTest {
 
         assertFalse(awaitValue { result })
         assertTrue(viewModel.uiState.value.userMessage!!.isError)
-        assertTrue(viewModel.uiState.value.userMessage!!.text.contains("Verification failed"))
+        assertEquals(
+            "Oubli could not reveal the seed phrase right now. Try again.",
+            viewModel.uiState.value.userMessage!!.text,
+        )
+        assertNotNull(viewModel.uiState.value.userMessage!!.diagnostics)
     }
 
     @Test
@@ -522,6 +542,14 @@ class WalletViewModelTest {
             }
         }
         return resolved!!
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun setScreenState(screenState: ScreenState) {
+        val field = WalletViewModel::class.java.getDeclaredField("_uiState")
+        field.isAccessible = true
+        val stateFlow = field.get(viewModel) as kotlinx.coroutines.flow.MutableStateFlow<WalletUiState>
+        stateFlow.value = WalletUiState(screenState = screenState)
     }
 }
 

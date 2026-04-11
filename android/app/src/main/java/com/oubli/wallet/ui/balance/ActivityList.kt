@@ -48,6 +48,8 @@ import com.oubli.wallet.ui.theme.OubliError
 import com.oubli.wallet.ui.theme.OubliPending
 import com.oubli.wallet.ui.theme.OubliReceived
 import com.oubli.wallet.ui.theme.OubliSent
+import com.oubli.wallet.ui.util.SupportIssue
+import com.oubli.wallet.ui.util.shareText
 import com.oubli.wallet.ui.util.truncateAddress
 import uniffi.oubli.ActivityEventFfi
 import java.time.Instant
@@ -58,7 +60,7 @@ import java.time.format.FormatStyle
 @Composable
 fun ActivityList(
     activity: List<ActivityEventFfi>,
-    autoFundError: String?,
+    autoFundIssue: SupportIssue?,
     contactNames: Map<String, String> = emptyMap(),
     balanceSats: String = "0",
     onShowMessage: (String) -> Unit = {},
@@ -125,32 +127,39 @@ fun ActivityList(
     }
 
     // Auto-fund error banner
-    if (autoFundError != null) {
+    if (autoFundIssue != null) {
         Spacer(modifier = Modifier.height(16.dp))
         val context = LocalContext.current
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("error", autoFundError))
-                    onShowMessage("Copied to clipboard")
-                },
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    text = "Auto-fund error (tap to copy)",
+                    text = "Auto-fund needs attention",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = autoFundError,
+                    text = autoFundIssue.message,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        shareText(
+                            context = context,
+                            chooserTitle = "Share diagnostics",
+                            subject = "Oubli diagnostics",
+                            text = autoFundIssue.diagnostics,
+                        )
+                    },
+                ) {
+                    Text("Share Diagnostics")
+                }
             }
         }
     }

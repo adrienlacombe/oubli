@@ -333,7 +333,7 @@ impl WalletCore {
     // ── Biometric unlock (T0 → T2) ──────────────────────────
 
     pub async fn handle_unlock_biometric(&mut self) -> Result<(), WalletError> {
-        eprintln!("[oubli] unlock_biometric: start");
+        crate::debug_event!("wallet.unlock_biometric", "start");
         let bio_ok = self
             .storage
             .request_biometric("Unlock Oubli wallet")
@@ -344,7 +344,7 @@ impl WalletCore {
                 got: "biometric authentication failed".into(),
             });
         }
-        eprintln!("[oubli] unlock_biometric: bio ok");
+        crate::debug_event!("wallet.unlock_biometric", "biometric_authenticated");
 
         match self.auth_state.apply(AuthAction::BiometricSuccess) {
             AuthTransitionResult::TierChanged(_) => {}
@@ -355,7 +355,7 @@ impl WalletCore {
                 });
             }
         }
-        eprintln!("[oubli] unlock_biometric: auth state updated");
+        crate::debug_event!("wallet.unlock_biometric", "auth_state_updated");
 
         // Decrypt seed and derive account
         let salt = self
@@ -375,25 +375,32 @@ impl WalletCore {
         let seed_bytes = BlobManager::unwrap(&kek, &blob, APP_ID)?;
         let mnemonic =
             String::from_utf8(seed_bytes).map_err(|e| WalletError::Kms(e.to_string()))?;
-        eprintln!("[oubli] unlock_biometric: seed decrypted");
+        crate::debug_event!("wallet.unlock_biometric", "seed_decrypted");
 
         let account = derive_active_account(&mnemonic, &self.config)?;
-        eprintln!("[oubli] unlock_biometric: account derived");
+        crate::debug_event!("wallet.unlock_biometric", "account_derived");
         let address = self.starknet_address_hex.clone().unwrap_or_default();
         self.active_account = Some(account);
 
         // Init RPC and fetch balance
         self.init_rpc()?;
-        eprintln!("[oubli] unlock_biometric: rpc init ok");
+        crate::debug_event!("wallet.unlock_biometric", "rpc_initialized");
         if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
             let res = fetch_and_decrypt_balance(rpc, acct).await;
-            eprintln!("[oubli] unlock_biometric: fetch_balance result = {:?}", res);
+            match &res {
+                Ok(_) => crate::debug_event!("wallet.unlock_biometric", "balance_refreshed"),
+                Err(err) => crate::warn_event!(
+                    "wallet.unlock_biometric",
+                    "balance_refresh_failed",
+                    "error_kind" = crate::telemetry::error_kind(err)
+                ),
+            }
         }
 
         // Auto-fund: sweep any public WBTC into the privacy pool
-        eprintln!("[oubli] unlock_biometric: starting auto_fund");
+        crate::debug_event!("wallet.unlock_biometric", "auto_fund_started");
         self.handle_auto_fund().await;
-        eprintln!("[oubli] unlock_biometric: auto_fund done");
+        crate::debug_event!("wallet.unlock_biometric", "auto_fund_finished");
 
         // Auto-rollover: claim any pending balance into spendable
         self.handle_auto_rollover().await;
@@ -404,7 +411,7 @@ impl WalletCore {
             balance_sats,
             pending_sats,
         };
-        eprintln!("[oubli] unlock_biometric: state set to Ready");
+        crate::debug_event!("wallet.unlock_biometric", "ready");
 
         Ok(())
     }
@@ -719,9 +726,23 @@ impl WalletCore {
                 .get_erc20_balance(&token_contract, &starknet_address)
                 .await?;
 
-            let has_auditor = self.active_account.as_ref().map(|a| a.auditor_key.is_some()).unwrap_or(false);
-            let has_cipher = self.active_account.as_ref().map(|a| a.cipher_balance.is_some()).unwrap_or(false);
-            eprintln!("[oubli] auto_fund: token_balance={token_balance} auditor={has_auditor} cipher={has_cipher}");
+            let has_auditor = self
+                .active_account
+                .as_ref()
+                .map(|a| a.auditor_key.is_some())
+                .unwrap_or(false);
+            let has_cipher = self
+                .active_account
+                .as_ref()
+                .map(|a| a.cipher_balance.is_some())
+                .unwrap_or(false);
+            crate::debug_event!(
+                "wallet.auto_fund",
+                "precheck",
+                "has_public_balance" = (token_balance > 0),
+                "has_auditor" = has_auditor,
+                "has_cipher_balance" = has_cipher
+            );
 
             if token_balance == 0 {
                 return Ok(None);
@@ -770,7 +791,9 @@ impl WalletCore {
                 .active_account
                 .as_mut()
                 .ok_or(WalletError::NoActiveAccount)?;
-            let tx_hash = crate::operations::execute_fund(acct, &amount_sats, &config, rpc, submitter).await?;
+            let tx_hash =
+                crate::operations::execute_fund(acct, &amount_sats, &config, rpc, submitter)
+                    .await?;
 
             Ok(Some(tx_hash))
         }
@@ -780,9 +803,17 @@ impl WalletCore {
             Ok(Some(tx_hash)) => {
                 self.last_auto_fund_error = None;
                 // Wait for confirmation, then re-fetch so cipher_balance is correct
-                eprintln!("[oubli] auto_fund: waiting for tx {tx_hash} confirmation");
+                crate::debug_event!(
+                    "wallet.auto_fund",
+                    "submitted",
+                    "tx" = crate::telemetry::short_id(&tx_hash)
+                );
                 if let Err(e) = self.wait_for_tx(&tx_hash).await {
-                    eprintln!("[oubli] auto_fund: wait failed: {e}");
+                    crate::warn_event!(
+                        "wallet.auto_fund",
+                        "confirmation_wait_failed",
+                        "error_kind" = crate::telemetry::error_kind(&e)
+                    );
                 }
                 if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
                     let _ = fetch_and_decrypt_balance(rpc, acct).await;
@@ -792,7 +823,11 @@ impl WalletCore {
                 self.last_auto_fund_error = None;
             }
             Err(e) => {
-                eprintln!("[oubli] auto_fund: error: {e}");
+                crate::warn_event!(
+                    "wallet.auto_fund",
+                    "failed",
+                    "error_kind" = crate::telemetry::error_kind(&e)
+                );
                 self.last_auto_fund_error = Some(e.to_string());
             }
         }
@@ -814,7 +849,7 @@ impl WalletCore {
             return;
         }
 
-        eprintln!("[oubli] auto_rollover: pending > 0, triggering rollover");
+        crate::debug_event!("wallet.auto_rollover", "started");
         let config = self.config.clone();
         let result = {
             let rpc = match self.rpc.as_ref() {
@@ -831,16 +866,28 @@ impl WalletCore {
 
         match &result {
             Ok(tx) => {
-                eprintln!("[oubli] auto_rollover: submitted tx {tx}, waiting for confirmation");
+                crate::debug_event!(
+                    "wallet.auto_rollover",
+                    "submitted",
+                    "tx" = crate::telemetry::short_id(tx)
+                );
                 // Wait for confirmation, then re-fetch so cipher_balance is correct
                 if let Err(e) = self.wait_for_tx(tx).await {
-                    eprintln!("[oubli] auto_rollover: wait failed: {e}");
+                    crate::warn_event!(
+                        "wallet.auto_rollover",
+                        "confirmation_wait_failed",
+                        "error_kind" = crate::telemetry::error_kind(&e)
+                    );
                 }
                 if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
                     let _ = fetch_and_decrypt_balance(rpc, acct).await;
                 }
             }
-            Err(e) => eprintln!("[oubli] auto_rollover: failed (will retry): {e}"),
+            Err(e) => crate::warn_event!(
+                "wallet.auto_rollover",
+                "failed",
+                "error_kind" = crate::telemetry::error_kind(e)
+            ),
         }
     }
 
@@ -1394,9 +1441,10 @@ impl WalletCore {
             .map_err(crate::swap::swap_err)?;
 
         let swap_id = quote.swap_id.clone();
-        eprintln!(
-            "[oubli] pay_lightning: quote created, swap_id={}, input={}, output={}",
-            swap_id, quote.input_amount, quote.output_amount
+        crate::debug_event!(
+            "wallet.pay_lightning",
+            "quote_created",
+            "swap_id" = crate::telemetry::short_id(&swap_id)
         );
 
         // 2. Withdraw the needed WBTC from Tongo to own Starknet address.
@@ -1408,9 +1456,10 @@ impl WalletCore {
         })?;
         let rounded_sats = ((input_sats + 9) / 10) * 10;
         let input_amount_str = rounded_sats.to_string();
-        eprintln!(
-            "[oubli] pay_lightning: input_sats={}, rounded_withdraw={}",
-            input_sats, rounded_sats
+        crate::debug_event!(
+            "wallet.pay_lightning",
+            "withdraw_amount_prepared",
+            "rounded_to_ten_sats" = true
         );
 
         let own_address = self
@@ -1448,9 +1497,10 @@ impl WalletCore {
             }
         };
 
-        eprintln!(
-            "[oubli] pay_lightning: Tongo withdraw tx submitted: {}",
-            withdraw_tx
+        crate::debug_event!(
+            "wallet.pay_lightning",
+            "withdraw_submitted",
+            "tx" = crate::telemetry::short_id(&withdraw_tx)
         );
 
         // 3. Wait for the Tongo withdraw tx to confirm (~2 min).
@@ -1479,7 +1529,7 @@ impl WalletCore {
             return Err(err);
         }
 
-        eprintln!("[oubli] pay_lightning: withdraw confirmed, executing swap");
+        crate::debug_event!("wallet.pay_lightning", "withdraw_confirmed");
 
         // 4. Execute the swap (approve WBTC + escrow via paymaster)
         self.set_processing("ln: executing swap...");
@@ -1493,7 +1543,11 @@ impl WalletCore {
 
         match exec_result {
             Ok(()) => {
-                eprintln!("[oubli] pay_lightning: swap executed successfully");
+                crate::debug_event!(
+                    "wallet.pay_lightning",
+                    "swap_executed",
+                    "swap_id" = crate::telemetry::short_id(&swap_id)
+                );
                 // Refresh balance after the operation
                 if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
                     let _ = fetch_and_decrypt_balance(rpc, acct).await;

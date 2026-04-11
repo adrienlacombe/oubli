@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+mod telemetry;
+
 use oubli_backup::{SeedDisplayFlow, VerificationPrompt};
 use oubli_wallet::{NetworkConfig, WalletCore, WalletState};
 
@@ -451,7 +453,11 @@ impl OubliWallet {
         if let Some(url) = rpc_url {
             if !url.trim().is_empty() {
                 if let Err(err) = config.set_rpc_url(&url) {
-                    eprintln!("[oubli] ignoring invalid RPC override: {err}");
+                    crate::bridge_warn_event!(
+                        "bridge.config",
+                        "invalid_rpc_override",
+                        "error_kind" = telemetry::error_kind(&err)
+                    );
                 }
             }
         }
@@ -605,7 +611,11 @@ impl OubliWallet {
         let mut core = self.core.lock().unwrap();
         if let Err(err) = core.update_rpc_url(url) {
             set_error_msg(err.to_string());
-            eprintln!("[oubli] update_rpc_url failed: {err}");
+            crate::bridge_warn_event!(
+                "bridge.config",
+                "update_rpc_url_failed",
+                "error_kind" = telemetry::error_kind(&err)
+            );
         }
     }
 
@@ -981,7 +991,11 @@ fn fetch_btc_price_blocking(currency: &str) -> Option<f64> {
         {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("[oubli] btc price: client build error: {e}");
+                crate::bridge_warn_event!(
+                    "bridge.btc_price",
+                    "client_build_failed",
+                    "error_kind" = telemetry::error_kind(&e)
+                );
                 let _ = tx.send(None);
                 return;
             }
@@ -993,7 +1007,11 @@ fn fetch_btc_price_blocking(currency: &str) -> Option<f64> {
         let resp = match client.get(&url).send() {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("[oubli] btc price: request error: {e}");
+                crate::bridge_warn_event!(
+                    "bridge.btc_price",
+                    "request_failed",
+                    "error_kind" = telemetry::error_kind(&e)
+                );
                 let _ = tx.send(None);
                 return;
             }
@@ -1001,7 +1019,11 @@ fn fetch_btc_price_blocking(currency: &str) -> Option<f64> {
         let json: serde_json::Value = match resp.json() {
             Ok(j) => j,
             Err(e) => {
-                eprintln!("[oubli] btc price: json parse error: {e}");
+                crate::bridge_warn_event!(
+                    "bridge.btc_price",
+                    "json_parse_failed",
+                    "error_kind" = telemetry::error_kind(&e)
+                );
                 let _ = tx.send(None);
                 return;
             }

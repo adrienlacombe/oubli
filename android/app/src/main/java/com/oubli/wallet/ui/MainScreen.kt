@@ -27,6 +27,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.oubli.wallet.ui.balance.BalanceScreen
+import com.oubli.wallet.ui.util.shareText
 import com.oubli.wallet.viewmodel.ScreenState
 import com.oubli.wallet.viewmodel.WalletViewModel
 
@@ -54,13 +55,16 @@ fun MainScreen(
             if (userMessage.isError) {
                 val result = snackbarHostState.showSnackbar(
                     message = userMessage.text,
-                    actionLabel = "Copy",
+                    actionLabel = if (userMessage.diagnostics != null) "Share" else null,
                     duration = SnackbarDuration.Long,
                 )
-                if (result == SnackbarResult.ActionPerformed) {
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Error", userMessage.text))
-                    walletViewModel.showMessage("Copied to clipboard")
+                if (result == SnackbarResult.ActionPerformed && userMessage.diagnostics != null) {
+                    shareText(
+                        context = context,
+                        chooserTitle = "Share diagnostics",
+                        subject = "Oubli diagnostics",
+                        text = userMessage.diagnostics,
+                    )
                 }
             } else {
                 snackbarHostState.showSnackbar(userMessage.text)
@@ -132,7 +136,7 @@ fun MainScreen(
                         onDeleteContact = { walletViewModel.deleteContact(it) },
                         satsToFiatRaw = { walletViewModel.satsToFiatRaw(it) },
                         fiatToSats = { walletViewModel.fiatToSats(it) },
-                        autoFundError = screen.autoFundError,
+                        autoFundIssue = screen.autoFundIssue,
                         isRefreshing = screen.isRefreshing,
                         activityContactNames = screen.activityContactNames,
                         onShowMessage = { walletViewModel.showMessage(it) },
@@ -149,6 +153,7 @@ fun MainScreen(
                 is ScreenState.Error -> {
                     ErrorScreen(
                         message = screen.message,
+                        diagnostics = screen.diagnostics,
                         onRetry = { walletViewModel.refreshBalance() },
                     )
                 }
@@ -202,7 +207,8 @@ private fun ProcessingScreen(address: String, operation: String) {
 }
 
 @Composable
-private fun ErrorScreen(message: String, onRetry: () -> Unit) {
+private fun ErrorScreen(message: String, diagnostics: String?, onRetry: () -> Unit) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -220,6 +226,21 @@ private fun ErrorScreen(message: String, onRetry: () -> Unit) {
             Text(text = message, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.padding(16.dp))
             Button(onClick = onRetry) { Text("Retry") }
+            if (diagnostics != null) {
+                Spacer(modifier = Modifier.padding(8.dp))
+                Button(
+                    onClick = {
+                        shareText(
+                            context = context,
+                            chooserTitle = "Share diagnostics",
+                            subject = "Oubli diagnostics",
+                            text = diagnostics,
+                        )
+                    },
+                ) {
+                    Text("Share Diagnostics")
+                }
+            }
         }
     }
 }

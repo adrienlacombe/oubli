@@ -15,6 +15,7 @@ pub mod signing;
 pub mod state;
 pub mod submitter;
 pub mod swap;
+pub mod telemetry;
 
 pub use self::core::{ActiveAccount, ActivityEvent, ActivityStatus, WalletCore};
 pub use actions::UserAction;

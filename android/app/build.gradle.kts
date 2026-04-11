@@ -61,6 +61,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Include JNI libs for the native oubli-bridge library (liboubli_bridge.so)

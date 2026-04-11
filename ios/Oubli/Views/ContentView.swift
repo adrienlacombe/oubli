@@ -8,7 +8,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if let initError = viewModel.initError {
-                fatalErrorView(message: initError)
+                fatalErrorView(message: initError, diagnostics: viewModel.initDiagnostics)
             } else {
                 routedView
             }
@@ -84,13 +84,9 @@ struct ContentView: View {
             }
 
             HStack(spacing: 16) {
-                if let message = viewModel.errorMessage {
-                    Button {
-                        UIPasteboard.general.string = message
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        withAnimation { toastMessage = "Copied to clipboard" }
-                    } label: {
-                        Label("Copy Error", systemImage: "doc.on.doc")
+                if let diagnostics = viewModel.errorDiagnostics {
+                    ShareLink(item: diagnostics) {
+                        Label("Share Diagnostics", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.bordered)
                 }
@@ -136,7 +132,7 @@ struct ContentView: View {
         .padding()
     }
 
-    private func fatalErrorView(message: String) -> some View {
+    private func fatalErrorView(message: String, diagnostics: String?) -> some View {
         VStack(spacing: 24) {
             Image(systemName: "xmark.octagon.fill")
                 .font(.system(size: 56))
@@ -153,6 +149,13 @@ struct ContentView: View {
                 .foregroundColor(Color.oubliOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
+
+            if let diagnostics {
+                ShareLink(item: diagnostics) {
+                    Label("Share Diagnostics", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .padding()
     }
