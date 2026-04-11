@@ -136,6 +136,7 @@ class KeystoreStorage(
             val promptInfo = BiometricPrompt.PromptInfo.Builder()
                 .setTitle("Oubli")
                 .setSubtitle(reason)
+                .setNegativeButtonText("Cancel")
                 .setAllowedAuthenticators(BIOMETRIC_STRONG)
                 .build()
             prompt.authenticate(promptInfo)
