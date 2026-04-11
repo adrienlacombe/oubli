@@ -229,6 +229,8 @@ class WalletViewModel @Inject constructor(
             refreshBtcPrice()
             loadContacts()
             activityPollingJob = viewModelScope.launch(ioDispatcher) {
+                var knownTxHashes = emptySet<String>()
+                var firstPoll = true
                 while (true) {
                     delay(2000)
                     try {
@@ -238,6 +240,24 @@ class WalletViewModel @Inject constructor(
                         } catch (_: Exception) {
                             repository.getCachedActivity()
                         }
+
+                        // Detect new incoming payments by diffing against previous poll
+                        if (!firstPoll) {
+                            val incomingTypes = setOf("TransferIn", "Fund")
+                            events
+                                .filter { it.txHash !in knownTxHashes && it.eventType in incomingTypes }
+                                .forEach { event ->
+                                    _incomingPaymentEvent.emit(event)
+                                    _highlightedTxHashes.update { it + event.txHash }
+                                    launch {
+                                        delay(5000)
+                                        _highlightedTxHashes.update { it - event.txHash }
+                                    }
+                                }
+                        }
+                        knownTxHashes = events.map { it.txHash }.toSet()
+                        firstPoll = false
+
                         val contacts = (_uiState.value.screenState as? ScreenState.Ready)?.contacts ?: emptyList()
                         val nameMap = buildContactNameMap(events, contacts)
                         _uiState.update { current ->
@@ -255,20 +275,6 @@ class WalletViewModel @Inject constructor(
                         }
                     } catch (_: Exception) {
                         // Polling failure is non-fatal
-                    }
-                }
-            }
-            // Collect incoming payment events from the Rust poll thread
-            if (paymentCallbackJob == null) {
-                paymentCallbackJob = viewModelScope.launch(ioDispatcher) {
-                    repository.incomingPayments.collect { event ->
-                        _incomingPaymentEvent.emit(event)
-                        _highlightedTxHashes.update { it + event.txHash }
-                        // Remove highlight after 5 seconds
-                        launch {
-                            delay(5000)
-                            _highlightedTxHashes.update { it - event.txHash }
-                        }
                     }
                 }
             }
