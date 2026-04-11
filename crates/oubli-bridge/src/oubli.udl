@@ -137,14 +137,6 @@ interface OubliWallet {
     void handle_unlock_biometric();
 
     [Throws=OubliError]
-    void handle_unlock_pin(string pin);
-
-    [Throws=OubliError]
-    void set_pin(string pin);
-
-    boolean has_pin();
-
-    [Throws=OubliError]
     void handle_lock();
 
     [Throws=OubliError]

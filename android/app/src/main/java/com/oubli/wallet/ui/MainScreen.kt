@@ -95,7 +95,6 @@ fun MainScreen(
                     OnboardingScreen(
                         onGenerateMnemonic = { callback -> walletViewModel.generateMnemonic(callback) },
                         onValidateMnemonic = { phrase, callback -> walletViewModel.validateMnemonic(phrase, callback) },
-                        onSetPin = { pin, callback -> walletViewModel.setPin(pin, callback) },
                         onComplete = { mnemonic -> walletViewModel.completeOnboarding(mnemonic) },
                         onShowMessage = { walletViewModel.showMessage(it) },
                     )
@@ -104,9 +103,7 @@ fun MainScreen(
                 is ScreenState.Locked -> {
                     LockedScreen(
                         unlockError = screen.unlockError,
-                        hasPin = walletViewModel.hasPin(),
                         onUnlockBiometric = { walletViewModel.unlockBiometric() },
-                        onUnlockPin = { pin -> walletViewModel.unlockPin(pin) },
                     )
                 }
 

@@ -11,21 +11,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -60,7 +57,6 @@ import androidx.compose.ui.unit.dp
 fun OnboardingScreen(
     onGenerateMnemonic: (callback: (String) -> Unit) -> Unit,
     onValidateMnemonic: (phrase: String, callback: (Boolean) -> Unit) -> Unit,
-    onSetPin: (pin: String, callback: (Boolean) -> Unit) -> Unit,
     onComplete: (mnemonic: String) -> Unit,
     onShowMessage: (String) -> Unit = {},
 ) {
@@ -82,7 +78,7 @@ fun OnboardingScreen(
             })
             3 -> MnemonicDisplayStep(
                 mnemonic = mnemonic,
-                onContinue = { step = 5 },
+                onContinue = { onComplete(mnemonic) },
                 onShowMessage = onShowMessage,
             )
             4 -> MnemonicRestoreStep(
@@ -91,8 +87,7 @@ fun OnboardingScreen(
                     onValidateMnemonic(phrase) { valid ->
                         if (valid) {
                             errorText = null
-                            mnemonic = phrase
-                            step = 5
+                            onComplete(phrase)
                         } else {
                             errorText = "Invalid seed phrase. Please check your words and try again."
                         }
@@ -100,16 +95,8 @@ fun OnboardingScreen(
                 },
                 onBack = {
                     errorText = null
-                    step = 0
+                    step = 2
                 },
-            )
-            5 -> PinSetupStep(
-                onSetPin = { pin ->
-                    onSetPin(pin) { success ->
-                        if (success) onComplete(mnemonic)
-                    }
-                },
-                onSkip = { onComplete(mnemonic) },
             )
         }
     }
@@ -389,139 +376,6 @@ private fun MnemonicRestoreStep(
         Spacer(modifier = Modifier.height(8.dp))
         TextButton(onClick = onBack) {
             Text("Back")
-        }
-    }
-}
-
-@Composable
-private fun PinSetupStep(
-    onSetPin: (String) -> Unit,
-    onSkip: () -> Unit,
-) {
-    var pin by rememberSaveable { mutableStateOf("") }
-    var confirmPin by rememberSaveable { mutableStateOf("") }
-    var confirming by rememberSaveable { mutableStateOf(false) }
-    var error by rememberSaveable { mutableStateOf<String?>(null) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = if (confirming) "Confirm PIN" else "Set a PIN",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.semantics { heading() },
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = if (confirming) "Enter the same PIN again."
-            else "Used as a fallback when biometrics aren't available.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        val currentPin = if (confirming) confirmPin else pin
-
-        // PIN dots
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            for (i in 0 until 6) {
-                Text(
-                    text = if (i < currentPin.length) "\u25CF" else "\u25CB",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = if (i < currentPin.length) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outlineVariant,
-                )
-            }
-        }
-
-        if (error != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = error!!,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Number pad
-        val rows = listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            listOf("", "0", "del"),
-        )
-        for (row in rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(0.7f),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                for (key in row) {
-                    when (key) {
-                        "" -> Spacer(modifier = Modifier.size(64.dp))
-                        "del" -> androidx.compose.material3.IconButton(
-                            onClick = {
-                                if (confirming) {
-                                    if (confirmPin.isNotEmpty()) confirmPin = confirmPin.dropLast(1)
-                                } else {
-                                    if (pin.isNotEmpty()) pin = pin.dropLast(1)
-                                }
-                            },
-                            modifier = Modifier.size(64.dp),
-                        ) {
-                            Icon(
-                                Icons.Filled.Backspace,
-                                contentDescription = "Delete",
-                            )
-                        }
-                        else -> androidx.compose.material3.FilledTonalButton(
-                            onClick = {
-                                if (confirming) {
-                                    if (confirmPin.length < 6) confirmPin += key
-                                } else {
-                                    if (pin.length < 6) pin += key
-                                }
-                                error = null
-                            },
-                            modifier = Modifier.size(64.dp),
-                        ) {
-                            Text(key, style = MaterialTheme.typography.titleLarge)
-                        }
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                if (!confirming) {
-                    confirming = true
-                } else {
-                    if (confirmPin == pin) {
-                        onSetPin(pin)
-                    } else {
-                        error = "PINs don't match. Try again."
-                        confirmPin = ""
-                    }
-                }
-            },
-            enabled = currentPin.length >= 4,
-            modifier = Modifier.fillMaxWidth(0.7f),
-        ) {
-            Text(if (confirming) "Confirm" else "Continue")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        TextButton(onClick = onSkip) {
-            Text("Skip")
         }
     }
 }

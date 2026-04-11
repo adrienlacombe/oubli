@@ -539,25 +539,6 @@ impl OubliWallet {
         Ok(())
     }
 
-    pub fn handle_unlock_pin(&self, pin: String) -> Result<(), OubliError> {
-        let mut core = self.core.lock().unwrap();
-        self.runtime
-            .block_on(core.handle_unlock_pin(&pin))
-            .map_err(OubliError::from)?;
-        self.polling_active.store(true, Ordering::Relaxed);
-        Ok(())
-    }
-
-    pub fn set_pin(&self, pin: String) -> Result<(), OubliError> {
-        let core = self.core.lock().unwrap();
-        core.set_pin(&pin).map_err(OubliError::from)
-    }
-
-    pub fn has_pin(&self) -> bool {
-        let core = self.core.lock().unwrap();
-        core.has_pin()
-    }
-
     pub fn handle_lock(&self) -> Result<(), OubliError> {
         self.polling_active.store(false, Ordering::Relaxed);
         let mut core = self.core.lock().unwrap();
