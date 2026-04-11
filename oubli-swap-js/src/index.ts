@@ -292,16 +292,27 @@ async function createLnToWbtcSwap(amountSats: string, exactIn: boolean): Promise
     const swapId = swap.getId();
     activeSwaps.set(swapId, swap);
 
+    const rawExpiry = swap.getExpiry?.();
+    const lnInvoice = swap.getLightningInvoice?.() ?? swap.getAddress?.() ?? undefined;
+
+    // If the SDK doesn't provide an expiry, parse it from the BOLT11 invoice.
+    // BOLT11 invoices have a default expiry of 3600s if not specified.
+    let expiry = typeof rawExpiry === "number" && rawExpiry > 0 ? rawExpiry : 0;
+    if (expiry === 0 && lnInvoice) {
+      // Estimate expiry: current time + 10 minutes (LP typical window)
+      expiry = Math.floor(Date.now() / 1000) + 600;
+    }
+
     const quote: SwapQuote = {
       swapId,
       inputAmount: swap.getInput().amount.toString(),
       outputAmount: swap.getOutput().amount.toString(),
       fee: swap.getFee?.().totalInSrcToken?.amount?.toString() ?? "0",
-      expiry: swap.getExpiry?.() ?? 0,
-      lnInvoice: swap.getLightningInvoice?.() ?? swap.getAddress?.() ?? undefined,
+      expiry,
+      lnInvoice,
     };
 
-    __oubli_log("info", `BTCLN→WBTC swap created: ${quote.swapId}, invoice=${quote.lnInvoice?.substring(0, 30)}...`);
+    __oubli_log("info", `BTCLN→WBTC swap created: ${quote.swapId}, rawExpiry=${rawExpiry}, expiry=${expiry}, invoice=${quote.lnInvoice?.substring(0, 30)}...`);
     return JSON.stringify({ ok: true, quote });
   } catch (e: any) {
     __oubli_log("error", `createLnToWbtcSwap failed: ${e.message ?? e}`);

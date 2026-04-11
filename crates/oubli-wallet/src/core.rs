@@ -1333,6 +1333,36 @@ impl WalletCore {
             .map_err(crate::swap::swap_err)
     }
 
+    /// Deploy the Starknet account if not yet on-chain.
+    /// No-op if already deployed.
+    pub async fn handle_ensure_deployed(&mut self) -> Result<(), WalletError> {
+        self.require_t2()?;
+        self.ensure_account_deployed().await
+    }
+
+    /// Initialize the swap engine (QuickJS + Atomiq SDK).
+    /// No-op if already initialized.
+    pub async fn handle_ensure_swap_engine(&mut self) -> Result<(), WalletError> {
+        self.require_t2()?;
+        self.ensure_swap_engine().await
+    }
+
+    /// Create a Lightning → WBTC swap quote without doing deployment or
+    /// engine init (caller must have called those first).
+    pub async fn handle_create_ln_invoice(
+        &mut self,
+        amount_sats: u64,
+        exact_in: bool,
+    ) -> Result<oubli_swap::types::SwapQuote, WalletError> {
+        self.require_t2()?;
+        self.swap_engine
+            .as_ref()
+            .ok_or(WalletError::Network("swap engine not initialized".into()))?
+            .create_ln_to_wbtc(amount_sats, exact_in)
+            .await
+            .map_err(crate::swap::swap_err)
+    }
+
     /// Execute a pending swap (sign and submit Starknet txs).
     pub async fn handle_swap_execute(&mut self, swap_id: &str) -> Result<(), WalletError> {
         self.require_t2()?;

@@ -41,6 +41,7 @@ data class LightningReceiveUiState(
     val feeSats: String? = null,
     val expiryEpochSeconds: Long? = null,
     val isCreating: Boolean = false,
+    val creatingStep: String? = null,
     val isWaiting: Boolean = false,
     val isSuccess: Boolean = false,
     val errorMessage: String? = null,

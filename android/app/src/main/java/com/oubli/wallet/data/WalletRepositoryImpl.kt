@@ -114,6 +114,18 @@ class WalletRepositoryImpl @Inject constructor(
         wallet!!.payLightning(bolt11)
     }
 
+    override suspend fun ensureDeployed() = withContext(Dispatchers.IO) {
+        wallet!!.ensureDeployed()
+    }
+
+    override suspend fun ensureSwapEngine() = withContext(Dispatchers.IO) {
+        wallet!!.ensureSwapEngine()
+    }
+
+    override suspend fun createLnInvoice(amountSats: ULong, exactIn: Boolean): SwapQuoteFfi = withContext(Dispatchers.IO) {
+        wallet!!.createLnInvoice(amountSats, exactIn)
+    }
+
     override suspend fun swapLnToWbtc(amountSats: ULong, testnet: Boolean): SwapQuoteFfi = withContext(Dispatchers.IO) {
         wallet!!.swapLnToWbtc(amountSats, testnet)
     }

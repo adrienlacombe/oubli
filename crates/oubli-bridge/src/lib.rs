@@ -844,6 +844,36 @@ impl OubliWallet {
         Ok(swap_quote_to_ffi(quote))
     }
 
+    /// Deploy the Starknet account if needed. No-op if already deployed.
+    pub fn ensure_deployed(&self) -> Result<(), OubliError> {
+        let mut core = self.core.lock().unwrap();
+        self.runtime
+            .block_on(core.handle_ensure_deployed())
+            .map_err(OubliError::from)
+    }
+
+    /// Initialize the swap engine (QuickJS + Atomiq SDK). No-op if ready.
+    pub fn ensure_swap_engine(&self) -> Result<(), OubliError> {
+        let mut core = self.core.lock().unwrap();
+        self.runtime
+            .block_on(core.handle_ensure_swap_engine())
+            .map_err(OubliError::from)
+    }
+
+    /// Create a Lightning receive invoice without deploy/engine init.
+    pub fn create_ln_invoice(
+        &self,
+        amount_sats: u64,
+        exact_in: bool,
+    ) -> Result<SwapQuoteFFI, OubliError> {
+        let mut core = self.core.lock().unwrap();
+        let quote = self
+            .runtime
+            .block_on(core.handle_create_ln_invoice(amount_sats, exact_in))
+            .map_err(OubliError::from)?;
+        Ok(swap_quote_to_ffi(quote))
+    }
+
     pub fn swap_execute(&self, swap_id: String) -> Result<(), OubliError> {
         let mut core = self.core.lock().unwrap();
         self.runtime

@@ -228,6 +228,12 @@ class WalletViewModel @Inject constructor(
         if (shouldPoll && activityPollingJob == null) {
             refreshBtcPrice()
             loadContacts()
+            // Eagerly deploy account + init swap engine in background so
+            // Lightning receive is fast when the user opens it.
+            viewModelScope.launch(ioDispatcher) {
+                try { repository.ensureDeployed() } catch (_: Exception) {}
+                try { repository.ensureSwapEngine() } catch (_: Exception) {}
+            }
             activityPollingJob = viewModelScope.launch(ioDispatcher) {
                 var knownTxHashes = emptySet<String>()
                 var firstPoll = true
@@ -607,27 +613,45 @@ class WalletViewModel @Inject constructor(
         setLightningReceiveState(
             LightningReceiveUiState(
                 isCreating = true,
+                creatingStep = "Deploying wallet…",
                 errorMessage = null,
             )
         )
 
         viewModelScope.launch(ioDispatcher) {
-            val result = runCatching { repository.swapLnToWbtc(amountSats, false) }
-            if (result.isSuccess) {
-                val quote = result.getOrThrow()
+            try {
+                // Step 1: Deploy account if needed (no-op if eager prewarm finished)
+                repository.ensureDeployed()
+
+                // Step 2: Initialize swap engine (no-op if eager prewarm finished)
+                setLightningReceiveState(
+                    _lightningReceiveState.value.copy(creatingStep = "Connecting to Lightning…")
+                )
+                repository.ensureSwapEngine()
+
+                // Step 3: Create invoice — this is the only LP call
+                setLightningReceiveState(
+                    _lightningReceiveState.value.copy(creatingStep = "Creating invoice…")
+                )
+                val quote = repository.createLnInvoice(amountSats, false)
+
+                val now = System.currentTimeMillis() / 1000
+                val expiryEpoch = quote.expiry.toLong()
+                android.util.Log.d("OubliLN", "Invoice created: expiry=$expiryEpoch now=$now remaining=${expiryEpoch - now}s swapId=${quote.swapId}")
+
                 setLightningReceiveState(
                     LightningReceiveUiState(
                         invoice = quote.lnInvoice,
                         swapId = quote.swapId,
                         feeSats = quote.fee,
-                        expiryEpochSeconds = quote.expiry.toLong(),
+                        expiryEpochSeconds = expiryEpoch,
                     )
                 )
                 waitForLightningReceive(quote.swapId)
-            } else {
+            } catch (e: Exception) {
                 setLightningReceiveState(
                     LightningReceiveUiState(
-                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to create invoice",
+                        errorMessage = e.message ?: "Failed to create invoice",
                     )
                 )
             }

@@ -63,6 +63,12 @@ interface WalletRepository {
 
     suspend fun payLightning(bolt11: String): String?
 
+    suspend fun ensureDeployed()
+
+    suspend fun ensureSwapEngine()
+
+    suspend fun createLnInvoice(amountSats: ULong, exactIn: Boolean): SwapQuoteFfi
+
     suspend fun swapLnToWbtc(amountSats: ULong, testnet: Boolean): SwapQuoteFfi
 
     suspend fun receiveLightningWait(swapId: String)

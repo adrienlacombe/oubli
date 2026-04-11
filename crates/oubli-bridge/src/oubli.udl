@@ -204,6 +204,15 @@ interface OubliWallet {
     SwapQuoteFFI swap_ln_to_wbtc(u64 amount_sats, boolean exact_in);
 
     [Throws=OubliError]
+    void ensure_deployed();
+
+    [Throws=OubliError]
+    void ensure_swap_engine();
+
+    [Throws=OubliError]
+    SwapQuoteFFI create_ln_invoice(u64 amount_sats, boolean exact_in);
+
+    [Throws=OubliError]
     void swap_execute(string swap_id);
 
     [Throws=OubliError]

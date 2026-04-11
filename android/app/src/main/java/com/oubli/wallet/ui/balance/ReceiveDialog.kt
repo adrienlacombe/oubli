@@ -495,7 +495,7 @@ fun ReceiveDialog(
                                 CircularProgressIndicator(modifier = Modifier.size(40.dp))
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    "Preparing wallet...",
+                                    lightningReceiveState.creatingStep ?: "Preparing wallet…",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
