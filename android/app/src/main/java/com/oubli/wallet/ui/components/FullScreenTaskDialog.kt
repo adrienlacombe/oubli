@@ -1,31 +1,52 @@
 package com.oubli.wallet.ui.components
 
+import android.content.res.Resources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+
+/**
+ * Navigation bar height for Dialog windows.
+ *
+ * Full-screen Dialogs on Android 15+ (API 35) don't dispatch navigation bar
+ * insets to Compose, so `navigationBarsPadding()` returns 0. We read the
+ * system resource directly instead.
+ */
+@Composable
+private fun dialogNavBarHeight(): Dp {
+    val density = LocalDensity.current
+    return remember {
+        val res = Resources.getSystem()
+        val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
+        if (id > 0) with(density) { res.getDimensionPixelSize(id).toDp() } else 0.dp
+    }
+}
 
 @Composable
 fun FullScreenTaskDialog(
@@ -37,61 +58,71 @@ fun FullScreenTaskDialog(
     bottomBar: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val navBarHeight = dialogNavBarHeight()
+
     Dialog(
         onDismissRequest = { if (dismissEnabled) onDismissRequest() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
+        Scaffold(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                // Title bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                    TextButton(
-                        onClick = { (leadingAction ?: onDismissRequest)() },
-                        enabled = dismissEnabled,
-                        modifier = Modifier.align(Alignment.CenterStart),
-                    ) {
-                        Text(leadingActionLabel)
-                    }
-                }
-                HorizontalDivider()
-                // Content
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                ) {
-                    content()
-                }
-                // Bottom bar
-                if (bottomBar != null) {
-                    HorizontalDivider()
-                    Column(
+            containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                Column {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface)
-                            .navigationBarsPadding()
-                            .imePadding()
-                            .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp),
+                            .statusBarsPadding()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                     ) {
-                        bottomBar()
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                        TextButton(
+                            onClick = { (leadingAction ?: onDismissRequest)() },
+                            enabled = dismissEnabled,
+                            modifier = Modifier.align(Alignment.CenterStart),
+                        ) {
+                            Text(leadingActionLabel)
+                        }
                     }
+                    HorizontalDivider()
                 }
+            },
+            bottomBar = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (bottomBar != null) MaterialTheme.colorScheme.surface
+                            else MaterialTheme.colorScheme.background,
+                        ),
+                ) {
+                    if (bottomBar != null) {
+                        HorizontalDivider()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .imePadding()
+                                .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp),
+                        ) {
+                            bottomBar()
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(navBarHeight))
+                }
+            },
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+            ) {
+                content()
             }
         }
     }

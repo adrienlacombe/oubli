@@ -28,8 +28,8 @@ android {
         applicationId = "com.oubli.wallet"
         minSdk = 35
         targetSdk = 36
-        versionCode = 70
-        versionName = "0.1.69"
+        versionCode = 72
+        versionName = "0.1.71"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
