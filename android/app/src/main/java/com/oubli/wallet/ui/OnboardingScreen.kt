@@ -70,16 +70,12 @@ fun OnboardingScreen(
     ) { currentStep ->
         when (currentStep) {
             0 -> WelcomeStep(onGetStarted = { step = 1 }, onRestore = { step = 4 })
-            1 -> DisclaimerStep(onContinue = { step = 2 })
-            2 -> CreateOrRestoreStep(
-                onCreateNew = {
-                    onGenerateMnemonic { generated ->
-                        mnemonic = generated
-                        step = 3
-                    }
-                },
-                onRestore = { step = 4 },
-            )
+            1 -> DisclaimerStep(onContinue = {
+                onGenerateMnemonic { generated ->
+                    mnemonic = generated
+                    step = 3
+                }
+            })
             3 -> MnemonicDisplayStep(
                 mnemonic = mnemonic,
                 onContinue = { onComplete(mnemonic) },
@@ -193,37 +189,6 @@ private fun DisclaimerStep(onContinue: () -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth(), enabled = accepted) {
             Text("Continue")
-        }
-    }
-}
-
-@Composable
-private fun CreateOrRestoreStep(onCreateNew: () -> Unit, onRestore: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = "Set Up Your Wallet",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.semantics { heading() },
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Create a new wallet or restore an existing one from your seed phrase.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(48.dp))
-        Button(onClick = onCreateNew, modifier = Modifier.fillMaxWidth()) {
-            Text("Create New Wallet")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) {
-            Text("Restore from Seed Phrase")
         }
     }
 }
