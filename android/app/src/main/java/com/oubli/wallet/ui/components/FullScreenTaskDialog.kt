@@ -46,7 +46,7 @@ private fun dialogNavBarHeight(): Dp {
         val res = Resources.getSystem()
         val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
         val system = if (id > 0) with(density) { res.getDimensionPixelSize(id).toDp() } else 0.dp
-        maxOf(system, 48.dp) + 16.dp
+        maxOf(system, 48.dp) + 32.dp
     }
 }
 
