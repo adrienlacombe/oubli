@@ -35,6 +35,7 @@ make check-swap
 ## Common Task Commands
 
 ```sh
+make test-android-unit
 make build-swap-js
 make regen-swift
 make regen-kotlin
@@ -102,8 +103,9 @@ Edit `android/app/build.gradle.kts` — increment `versionCode` and `versionName
 ### 2. Tag a release
 
 ```sh
-git tag v0.1.64
-git push origin v0.1.64
+TAG=v0.1.69 # replace with the release tag you are shipping
+git tag "$TAG"
+git push origin "$TAG"
 ```
 
 The **Release** workflow builds a signed APK and creates a GitHub Release with the APK attached.
@@ -113,7 +115,8 @@ The **Release** workflow builds a signed APK and creates a GitHub Release with t
 Download the release APK and publish with your bunker signer:
 
 ```sh
-gh release download v0.1.64 --pattern "oubli-*.apk" --dir /tmp/oubli-release
+TAG=v0.1.69 # replace with the release tag you are shipping
+gh release download "$TAG" --pattern "oubli-*.apk" --dir /tmp/oubli-release
 mkdir -p android/app/build/outputs/apk/release
 cp /tmp/oubli-release/oubli-*.apk android/app/build/outputs/apk/release/app-release.apk
 cd android && SIGN_WITH="bunker://..." ~/go/bin/zsp publish -y --skip-preview --skip-certificate-linking zapstore.yaml

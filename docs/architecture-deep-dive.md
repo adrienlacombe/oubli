@@ -151,7 +151,7 @@ The wallet manages the following distinct key types:
 | **Tongo Public Key** (`pk = g^sk`) | EC Point | Stark curve | Account identifier (Tongo address), encryption target | PUBLIC |
 | **Starknet Signing Key** | Scalar | Stark curve (ECDSA) | Sign Starknet transactions, pay gas | CRITICAL - loss = inability to transact |
 | **Hint Key** | Symmetric | XChaCha12 (derived from `sk`) | Fast balance recovery without brute-force DLOG | HIGH - leaks balance |
-| **Seed Phrase** | Entropy | BIP-39 (24 words) | Root entropy for deterministic key derivation | CRITICAL - master secret |
+| **Seed Phrase** | Entropy | BIP-39 (12 words in the current app flow) | Root entropy for deterministic key derivation | CRITICAL - master secret |
 | **Biometric Auth Token** | Platform | Secure Enclave / StrongBox | Gate access to encrypted key material | HIGH - access control |
 
 ### 2.1 Key Relationships
@@ -191,14 +191,14 @@ Seed Phrase (BIP-39, 256-bit entropy)
 | Requirement | Specification |
 |-------------|--------------|
 | Entropy source | `kms` uses `getrandom` crate -> delegates to `SecRandomCopyBytes` (iOS) / `SecureRandom` (Android) |
-| Minimum entropy | 256 bits for seed generation (24-word mnemonic) |
+| Minimum entropy | 128 bits for the current 12-word seed flow |
 | Entropy health check | NIST SP 800-90B on-line health tests (repetition count + adaptive proportion) |
 | Fallback | Abort key generation if CSPRNG health check fails; never fall back to weaker source |
 | `kms` enforcement | `kms` uses `rand` + `getrandom` internally; deterministic RNG gated behind `#[cfg(feature = "test-utils")]` and cannot compile in production builds |
 
 ### 3.2 Seed Generation (via `kms`)
 
-1. Call `krusty_kms::mnemonic::generate_mnemonic(24)` -> `kms` generates 256 bits via platform CSPRNG, returns 24-word BIP-39 mnemonic.
+1. Call `krusty_kms::mnemonic::generate_mnemonic(12)` -> `kms` generates entropy via the platform CSPRNG and returns a 12-word BIP-39 mnemonic.
 2. Call `krusty_kms::mnemonic::mnemonic_to_seed(mnemonic, passphrase)` -> PBKDF2-HMAC-SHA512 (2048 rounds) -> 512-bit seed.
 3. Oubli's `oubli-store` encrypts the seed with KEK immediately (see Section 4). The mnemonic string is passed to the UI via UniFFI only during backup display, then zeroized.
 4. `kms` handles internal zeroization of raw entropy via `SecretFelt` / `Zeroize`.
@@ -226,7 +226,7 @@ Export in two formats:
 - **Base58**: Tongo address string -- used for display and sharing
 
 #### Quality Gate: Key Generation
-- [ ] `krusty_kms::mnemonic::generate_mnemonic(24)` returns valid BIP-39 mnemonic (checksum verified by `validate_mnemonic`)
+- [ ] `krusty_kms::mnemonic::generate_mnemonic(12)` returns valid BIP-39 mnemonic (checksum verified by `validate_mnemonic`)
 - [ ] `krusty_kms::derivation::derive_keypair` for coin types 5454, 5353, 9004 all produce valid Stark curve points
 - [ ] Hint key is 256 bits and deterministically reproducible from `sk_owner`
 - [ ] Key derivation is deterministic: same seed always produces same keys (verified against `kms` parity vectors in `fixtures/vectors/parity/`)
@@ -241,7 +241,7 @@ Export in two formats:
 - [ ] Mnemonic is encrypted with KEK immediately after display to user
 
 #### Smoke Test: Key Generation
-1. Generate a new wallet -> seed phrase is 24 words, valid BIP-39 English wordlist
+1. Generate a new wallet -> seed phrase is 12 words, valid BIP-39 English wordlist
 2. Derive keys from seed -> Tongo address matches `kms` Rust oracle for same seed
 3. Restore from same seed phrase -> identical Tongo address, Starknet address, and view key produced
 4. Corrupt 1 bit of entropy -> completely different mnemonic (avalanche property)
@@ -397,11 +397,11 @@ The seed phrase is the single recovery artifact. All keys are re-derivable.
 
 | Requirement | Specification |
 |-------------|--------------|
-| Display | Show 24 words one-at-a-time or in groups of 4, never all on one copyable screen |
-| Verification | User must re-enter words 3, 8, 17 (random subset) to confirm backup |
-| Clipboard | Clipboard access blocked during seed display |
-| Screen capture | Blocked via platform API during seed display |
-| Re-display | Requires T3 auth (biometric + PIN + confirmation) |
+| Display | Show the mnemonic in short groups (currently 12 words grouped for readability), never only as raw unstructured text |
+| Verification | User should confirm a random subset or pass an explicit backup-confirmation step before setup is considered complete |
+| Clipboard | Prefer no clipboard access; if copy is allowed, show an explicit warning and clear it quickly |
+| Screen capture | Prefer platform mitigation where available; otherwise show strong warnings and keep reveal flows intentionally narrow |
+| Re-display | Should require fresh high-trust authentication before revealing the seed again |
 | Format | BIP-39 English wordlist, compatible with standard wallet recovery |
 
 ### 6.2 Social Recovery (Optional, Future)
@@ -427,7 +427,7 @@ The seed phrase is the single recovery artifact. All keys are re-derivable.
 ### 6.4 Recovery Flow
 
 ```
-User enters 24-word seed
+User enters seed phrase
          |
          v
 BIP-39 checksum validation
@@ -885,7 +885,7 @@ kms version bump (triggered manually or by kms release)
 Every Oubli PR must pass:
 
 ```
-SMOKE-KMS-001: generate_wallet() -> valid 24-word BIP-39 mnemonic + valid Stark curve point
+SMOKE-KMS-001: generate_wallet() -> valid 12-word BIP-39 mnemonic + valid Stark curve point
 SMOKE-KMS-002: derive_keypair(seed, coin_type=5454) -> valid Stark curve point (via kms)
 SMOKE-KMS-003: Generate wallet -> export seed -> restore -> identical pk (via kms)
 SMOKE-KMS-004: Lock wallet -> attempt T2 operation -> rejected by auth tier
@@ -955,7 +955,7 @@ Users can prove transaction details to a third party without revealing `sk`:
 - [ ] Operation queue with sequential nonce management
 - [ ] Fund + View Balance operations (via `kms` `tongo-sdk`)
 - [ ] Auto-rollover on unlock (detect pending > 0, queue rollover at head)
-- [ ] Seed backup display + verification flow (24 words, clipboard blocked, screenshots blocked)
+- [ ] Seed backup display + verification flow (12 words in the current app, clipboard warnings or timed clearing, screenshot mitigation)
 - [ ] Seed restore flow (enter mnemonic -> `krusty_kms::validate_mnemonic` -> derive keys -> query chain)
 - [ ] iOS SwiftUI shell: renders `WalletState`, emits user actions
 - [ ] Android Compose shell: renders `WalletState`, emits user actions

@@ -122,7 +122,7 @@ Examples:
 - Rust-only change: `make test-offline`
 - wallet flow or auth/storage change: `make test-offline && make test-smoke`
 - swap TypeScript change: `make check-swap && make build-swap-js`
-- Android UI or ViewModel change: relevant Gradle tests
+- Android UI or ViewModel change: `cd android && ./gradlew testDebugUnitTest lintDebug`
 - iOS UI or view model change: relevant Xcode tests
 
 If you cannot run a required check locally, say so in the PR.

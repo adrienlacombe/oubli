@@ -1,7 +1,7 @@
 # Mobile UX Audit
 
 Date: 2026-03-12
-Updated: 2026-03-19
+Updated: 2026-04-11
 
 Scope: iOS and Android front-end screen flows for onboarding, lock, balance, send, receive, seed phrase, and backup.
 
@@ -15,14 +15,17 @@ Scope: iOS and Android front-end screen flows for onboarding, lock, balance, sen
 - Both platforms use full-screen task flows for Send, Receive, Seed Phrase, and Backup. Android uses a custom `FullScreenTaskDialog`; iOS uses `fullScreenCover`. AlertDialogs are reserved for short confirmations only.
 - iOS Receive now uses a labeled segmented control (`Oubli` / `Starknet` / `Lightning`) instead of unlabeled swipe dots, matching Android's `TabRow` pattern.
 - iOS primary actions (Review, Send, Pay Invoice, Done) are now in a sticky bottom bar via `safeAreaInset(edge: .bottom)`. The top nav bar only holds Close/Back.
+- Android full-screen flows now respect system bars more consistently, and the onboarding / locked / backup paths scroll instead of clipping as readily on smaller layouts or larger text.
+- Android Lightning receive no longer traps users inside a non-dismissible waiting state, and expired invoices now fall back to a recoverable create-again path instead of leaving stale invoice UI behind.
 
 ## Resolved Issues (since 2026-03-12)
 
 - **Lightning auto-pay on scan/paste**: Fixed. Both platforms now treat scan/paste as input, auto-fill the amount from the BOLT11 invoice, and require explicit review then confirm ("Pay Invoice" button) before sending.
-- **Dialog overload (AlertDialog for complex flows)**: Fixed. Android Send, Receive, and Seed Phrase dialogs now use `FullScreenTaskDialog`. iOS Send uses `fullScreenCover`. Only Debug Settings on Android still uses `AlertDialog` (appropriate for its simple single-field form).
+- **Dialog overload (AlertDialog for complex flows)**: Fixed. Android Send, Receive, and Seed Phrase dialogs now use `FullScreenTaskDialog`. iOS Send uses `fullScreenCover`. Alert dialogs are reserved for short confirmations instead of full task flows.
 - **iOS Receive swipe-only navigation**: Fixed. Segmented control Picker with `.segmented` style drives a TabView (page dots hidden). Three modes are visible and labeled at a glance.
 - **iOS primary actions in top nav bar**: Fixed. All primary actions now live in a bottom action bar. Nav bar is Close/Back only.
 - **Backup flow dead-ends**: Improved. iOS now shows a deterministic failed view with error message and "Go Back" button instead of dropping straight to failure. Android backup is a linear local flow (word groups → verification → done) with no spinners or dead-ends.
+- **Android seed clipboard handling**: Improved. Onboarding and reveal flows now warn before copying and clear the clipboard after 15 seconds if the copied seed is still present.
 
 ## Open UX Issues
 
@@ -38,17 +41,11 @@ Scope: iOS and Android front-end screen flows for onboarding, lock, balance, sen
   Recommendation: remove clipboard copy for seed phrases, or bury it behind an explicit risk confirmation in an advanced path.
   Affects: trust, error prevention.
 
-- Copy action feedback is inconsistent. Android auto-fund error card shows a Toast on copy; onboarding seed copy shows an icon change to "Copied!"; but Receive address/invoice copy buttons on Android complete silently. iOS seed copy shows "Copied!" text feedback but other copy actions are also silent.
+- Copy action feedback is still inconsistent. Different flows use different confirmation patterns (`Copied!` label swaps, transient toasts, and snackbars), so the same gesture does not always feel equally confirmed across the app.
   Why it is a UX problem: Inconsistent feedback across the same gesture makes the UI feel unfinished and trains uncertainty.
   Likely impact: repeated taps, missed confirmations, lower trust in the clipboard state.
   Recommendation: add snackbar/toast and light haptic feedback to every copy action across both platforms.
   Affects: usability, trust.
-
-- `Debug Settings` sits in the same 3-dot overflow menu as `Show Seed Phrase` on Android. These have very different audiences and risk levels.
-  Why it is a UX problem: It reads like a consumer option even though it is a developer tool, and proximity to seed phrase reveal normalizes the menu.
-  Likely impact: confusion for non-developers, accidental interaction with dev-only controls.
-  Recommendation: move Debug Settings behind a build-flag or developer-mode gate, or at minimum into a separate settings screen.
-  Affects: clarity, trust.
 
 - The iOS onboarding disclaimer is a pseudo-checkbox (Button with SF Symbol `checkmark.square.fill` / `square`) rather than a native Toggle or Checkbox control.
   Why it is a UX problem: Screen readers may not announce it as a toggle, and it does not follow platform interaction conventions.
@@ -63,7 +60,6 @@ Scope: iOS and Android front-end screen flows for onboarding, lock, balance, sen
 
 ## Quick Wins
 
-- Unify copy feedback: add snackbar/toast and light haptic to every copy action. Android Receive address copies and iOS non-seed copies are still silent.
-- Move `Debug Settings` out of the same overflow menu as `Show Seed Phrase` on Android.
+- Unify copy feedback: add snackbar/toast and light haptic to every copy action so copy confirmation feels the same everywhere.
 - Replace the iOS disclaimer pseudo-checkbox with a native toggle or add `accessibilityAddTraits(.isToggle)` so VoiceOver announces it correctly.
 - Add short helper text under the balance card the first time it appears to hint at tap-to-hide, then remove after first use.
