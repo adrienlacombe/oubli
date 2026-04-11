@@ -73,7 +73,9 @@ macro_rules! debug_event {
         }
         #[cfg(not(debug_assertions))]
         {
-            let _ = ($(&$value),+, &$target, &$event);
+            let _ = || {
+                let _ = ($(&$value),+, &$target, &$event);
+            };
         }
     }};
 }
@@ -95,7 +97,9 @@ macro_rules! warn_event {
         }
         #[cfg(not(debug_assertions))]
         {
-            let _ = ($(&$value),+, &$target, &$event);
+            let _ = || {
+                let _ = ($(&$value),+, &$target, &$event);
+            };
         }
     }};
 }

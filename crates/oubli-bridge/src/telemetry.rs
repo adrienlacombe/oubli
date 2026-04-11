@@ -53,7 +53,9 @@ macro_rules! bridge_debug_event {
         }
         #[cfg(not(debug_assertions))]
         {
-            let _ = ($(&$value),+, &$target, &$event);
+            let _ = || {
+                let _ = ($(&$value),+, &$target, &$event);
+            };
         }
     }};
 }
@@ -75,7 +77,9 @@ macro_rules! bridge_warn_event {
         }
         #[cfg(not(debug_assertions))]
         {
-            let _ = ($(&$value),+, &$target, &$event);
+            let _ = || {
+                let _ = ($(&$value),+, &$target, &$event);
+            };
         }
     }};
 }

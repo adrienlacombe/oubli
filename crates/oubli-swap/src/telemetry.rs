@@ -27,7 +27,9 @@ macro_rules! swap_debug_event {
         }
         #[cfg(not(debug_assertions))]
         {
-            let _ = ($(&$value),+, &$target, &$event);
+            let _ = || {
+                let _ = ($(&$value),+, &$target, &$event);
+            };
         }
     }};
 }

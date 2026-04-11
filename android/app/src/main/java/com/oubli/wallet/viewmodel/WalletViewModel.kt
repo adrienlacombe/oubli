@@ -287,17 +287,18 @@ class WalletViewModel @Inject constructor(
     }
 
     fun toggleCurrency() {
-        var shouldRefreshBtcPrice = false
         _uiState.update { current ->
             val screen = current.screenState
             if (screen is ScreenState.Ready) {
-                val newShowFiat = !screen.showFiat
-                shouldRefreshBtcPrice = newShowFiat && screen.btcFiatPrice == null
-                current.copy(screenState = screen.copy(showFiat = newShowFiat))
+                current.copy(screenState = screen.copy(showFiat = !screen.showFiat))
             } else {
                 current
             }
         }
+        val shouldRefreshBtcPrice =
+            (_uiState.value.screenState as? ScreenState.Ready)?.let { screen ->
+                screen.showFiat && screen.btcFiatPrice == null
+            } == true
         if (shouldRefreshBtcPrice) {
             refreshBtcPrice()
         }

@@ -99,6 +99,30 @@ class WalletViewModelTest {
     }
 
     @Test
+    fun `toggleCurrency refreshes BTC price when showing fiat without cached price`() = runTest(testDispatcher) {
+        fakeRepository.stateToReturn = readyState()
+        fakeRepository.initialized = true
+        fakeRepository.btcPricesByCurrency["usd"] = 65432.1
+
+        viewModel.uiState.test {
+            assertEquals(ScreenState.Loading, awaitItem().screenState)
+
+            viewModel.refreshBalance()
+            awaitUntil { it.screenState is ScreenState.Ready }
+
+            viewModel.toggleCurrency()
+            val ready = awaitUntil { (it.screenState as? ScreenState.Ready)?.btcFiatPrice == 65432.1 }
+                .screenState as ScreenState.Ready
+
+            assertEquals(true, ready.showFiat)
+            assertEquals(65432.1, ready.btcFiatPrice)
+            assertEquals(listOf("usd"), fakeRepository.btcPriceRequests)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `send success emits success message`() = runTest(testDispatcher) {
         fakeRepository.stateToReturn = readyState()
         fakeRepository.initialized = true
