@@ -1752,7 +1752,7 @@ name = "oubli-auth"
 version = "0.1.0"
 dependencies = [
  "argon2",
- "rand 0.8.5",
+ "rand 0.9.2",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -1766,7 +1766,7 @@ dependencies = [
  "bip39",
  "krusty-kms",
  "oubli-store",
- "rand 0.8.5",
+ "rand 0.9.2",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -1794,7 +1794,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "oubli-auth",
- "rand 0.8.5",
+ "rand 0.9.2",
  "thiserror 2.0.18",
  "zeroize",
 ]
