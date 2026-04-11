@@ -273,6 +273,75 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun unlockPin(pin: String) {
+        if (!repository.isInitialized) {
+            _uiState.update { current ->
+                val screen = current.screenState
+                if (screen is ScreenState.Locked) {
+                    current.copy(screenState = screen.copy(unlockError = "Wallet is unavailable. Restart the app and try again."))
+                } else {
+                    current
+                }
+            }
+            return
+        }
+
+        _uiState.update { current ->
+            val screen = current.screenState
+            if (screen is ScreenState.Locked) {
+                current.copy(screenState = screen.copy(unlockError = null))
+            } else {
+                current
+            }
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            try {
+                repository.unlockPin(pin)
+                refreshState()
+                val cachedEvents = repository.getCachedActivity()
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Ready) {
+                        current.copy(screenState = screen.copy(activity = cachedEvents))
+                    } else {
+                        current
+                    }
+                }
+                loadActivity()
+            } catch (e: Exception) {
+                val msg = if (e.message?.contains("PIN verification failed") == true) {
+                    "Incorrect PIN. Try again."
+                } else if (e.message?.contains("PIN not set") == true) {
+                    "PIN not set up."
+                } else {
+                    "Unlock failed. Try again."
+                }
+                _uiState.update { current ->
+                    val screen = current.screenState
+                    if (screen is ScreenState.Locked) {
+                        current.copy(screenState = screen.copy(unlockError = msg))
+                    } else {
+                        current
+                    }
+                }
+            }
+        }
+    }
+
+    fun setPin(pin: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(ioDispatcher) {
+            try {
+                repository.setPin(pin)
+                launch(Dispatchers.Main) { onResult(true) }
+            } catch (_: Exception) {
+                launch(Dispatchers.Main) { onResult(false) }
+            }
+        }
+    }
+
+    fun hasPin(): Boolean = repository.hasPin()
+
     // ---- Balance Privacy ----
 
     fun toggleBalanceHidden() {

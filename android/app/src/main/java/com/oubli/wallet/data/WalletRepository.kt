@@ -35,6 +35,12 @@ interface WalletRepository {
 
     suspend fun unlockBiometric()
 
+    suspend fun unlockPin(pin: String)
+
+    suspend fun setPin(pin: String)
+
+    fun hasPin(): Boolean
+
     // ---- Balance & Activity ----
 
     suspend fun refreshBalance()

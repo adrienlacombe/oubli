@@ -17,6 +17,7 @@ pub enum AuthTier {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthAction {
     BiometricSuccess,
+    PinSuccess,
     Timeout,
     Background,
     Lock,
@@ -49,8 +50,9 @@ impl AuthState {
     /// Drive the state machine. Returns the outcome.
     pub fn apply(&mut self, action: AuthAction) -> AuthTransitionResult {
         match (self.tier, action) {
-            // T0 -> T2 via biometric
-            (AuthTier::T0Locked, AuthAction::BiometricSuccess) => {
+            // T0 -> T2 via biometric or PIN
+            (AuthTier::T0Locked, AuthAction::BiometricSuccess)
+            | (AuthTier::T0Locked, AuthAction::PinSuccess) => {
                 self.transition_to(AuthTier::T2Transact)
             }
             // Timeout/background drops tier
@@ -142,6 +144,16 @@ mod tests {
         assert_eq!(
             s.apply(AuthAction::Background),
             AuthTransitionResult::TierChanged(AuthTier::T0Locked)
+        );
+    }
+
+    #[test]
+    fn pin_goes_straight_to_t2() {
+        let mut s = state();
+        assert_eq!(s.tier, AuthTier::T0Locked);
+        assert_eq!(
+            s.apply(AuthAction::PinSuccess),
+            AuthTransitionResult::TierChanged(AuthTier::T2Transact)
         );
     }
 

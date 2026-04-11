@@ -66,6 +66,16 @@ class WalletRepositoryImpl @Inject constructor(
         wallet!!.handleUnlockBiometric()
     }
 
+    override suspend fun unlockPin(pin: String) = withContext(Dispatchers.IO) {
+        wallet!!.handleUnlockPin(pin)
+    }
+
+    override suspend fun setPin(pin: String) = withContext(Dispatchers.IO) {
+        wallet!!.setPin(pin)
+    }
+
+    override fun hasPin(): Boolean = wallet?.hasPin() ?: false
+
     // ---- Balance & Activity ----
 
     override suspend fun refreshBalance() = withContext(Dispatchers.IO) {

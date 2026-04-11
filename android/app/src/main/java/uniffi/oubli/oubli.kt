@@ -852,6 +852,12 @@ internal open class UniffiVTableCallbackInterfacePlatformStorageCallback(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -917,15 +923,21 @@ fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_transfer(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_biometric(
 ): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_pin(
+): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_verify_seed_word(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_handle_withdraw(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_has_pin(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_pay_lightning(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_receive_lightning_wait(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact(
+): Short
+fun uniffi_oubli_bridge_checksum_method_oubliwallet_set_pin(
 ): Short
 fun uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc(
 ): Short
@@ -1067,16 +1079,22 @@ fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_transfer(`ptr`: Pointer,`am
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_biometric(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_pin(`ptr`: Pointer,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_verify_seed_word(`ptr`: Pointer,`promptIndex`: Int,`answer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 fun uniffi_oubli_bridge_fn_method_oubliwallet_handle_withdraw(`ptr`: Pointer,`amountSats`: RustBuffer.ByValue,`recipient`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_has_pin(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 fun uniffi_oubli_bridge_fn_method_oubliwallet_pay_lightning(`ptr`: Pointer,`bolt11`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_receive_lightning_wait(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_save_contact(`ptr`: Pointer,`contact`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_oubli_bridge_fn_method_oubliwallet_set_pin(`ptr`: Pointer,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_btc_to_wbtc(`ptr`: Pointer,`amountSats`: Long,`exactIn`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_oubli_bridge_fn_method_oubliwallet_swap_execute(`ptr`: Pointer,`swapId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1300,10 +1318,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_biometric() != 7333.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_handle_unlock_pin() != 62160.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_handle_verify_seed_word() != 52194.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_handle_withdraw() != 24059.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_has_pin() != 60316.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_pay_lightning() != 12672.toShort()) {
@@ -1313,6 +1337,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_save_contact() != 3700.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_set_pin() != 22523.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_oubli_bridge_checksum_method_oubliwallet_swap_btc_to_wbtc() != 49103.toShort()) {
@@ -1863,15 +1890,21 @@ public interface OubliWalletInterface {
     
     fun `handleUnlockBiometric`()
     
+    fun `handleUnlockPin`(`pin`: kotlin.String)
+    
     fun `handleVerifySeedWord`(`promptIndex`: kotlin.UInt, `answer`: kotlin.String): kotlin.Boolean
     
     fun `handleWithdraw`(`amountSats`: kotlin.String, `recipient`: kotlin.String): kotlin.String
+    
+    fun `hasPin`(): kotlin.Boolean
     
     fun `payLightning`(`bolt11`: kotlin.String): kotlin.String
     
     fun `receiveLightningWait`(`swapId`: kotlin.String)
     
     fun `saveContact`(`contact`: ContactFfi): kotlin.String
+    
+    fun `setPin`(`pin`: kotlin.String)
     
     fun `swapBtcToWbtc`(`amountSats`: kotlin.ULong, `exactIn`: kotlin.Boolean): SwapQuoteFfi
     
@@ -2295,6 +2328,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
     
 
     
+    @Throws(OubliException::class)override fun `handleUnlockPin`(`pin`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_handle_unlock_pin(
+        it, FfiConverterString.lower(`pin`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(OubliException::class)override fun `handleVerifySeedWord`(`promptIndex`: kotlin.UInt, `answer`: kotlin.String): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithPointer {
@@ -2314,6 +2359,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
     uniffiRustCallWithError(OubliException) { _status ->
     UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_handle_withdraw(
         it, FfiConverterString.lower(`amountSats`),FfiConverterString.lower(`recipient`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `hasPin`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_has_pin(
+        it, _status)
 }
     }
     )
@@ -2356,6 +2413,18 @@ open class OubliWallet: Disposable, AutoCloseable, OubliWalletInterface
     }
     )
     }
+    
+
+    
+    @Throws(OubliException::class)override fun `setPin`(`pin`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(OubliException) { _status ->
+    UniffiLib.INSTANCE.uniffi_oubli_bridge_fn_method_oubliwallet_set_pin(
+        it, FfiConverterString.lower(`pin`),_status)
+}
+    }
+    
     
 
     

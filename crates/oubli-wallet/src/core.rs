@@ -73,6 +73,7 @@ struct TransferMeta {
 
 const SEED_BLOB_KEY: &str = "oubli.seed.blob";
 const KEK_SALT_KEY: &str = "oubli.kek.salt";
+const PIN_HASH_KEY: &str = "oubli.pin.hash";
 const PUBKEY_KEY: &str = "oubli.pubkey";
 const STARKNET_ADDR_KEY: &str = "oubli.starknet.addr";
 const ACTIVITY_CACHE_KEY: &str = "oubli.activity.cache";
@@ -330,7 +331,7 @@ impl WalletCore {
         Ok(())
     }
 
-    // ── Biometric unlock (T0 → T2) ──────────────────────────
+    // ── Unlock (T0 → T2) ──────────────────────────────────
 
     pub async fn handle_unlock_biometric(&mut self) -> Result<(), WalletError> {
         crate::debug_event!("wallet.unlock_biometric", "start");
@@ -355,8 +356,53 @@ impl WalletCore {
                 });
             }
         }
-        crate::debug_event!("wallet.unlock_biometric", "auth_state_updated");
+        self.complete_unlock().await
+    }
 
+    pub async fn handle_unlock_pin(&mut self, pin: &str) -> Result<(), WalletError> {
+        crate::debug_event!("wallet.unlock_pin", "start");
+
+        let stored = self
+            .storage
+            .secure_load(PIN_HASH_KEY)
+            .map_err(|e| WalletError::Store(oubli_store::StoreError::Platform(e)))?
+            .ok_or(WalletError::Auth(oubli_auth::AuthError::PinNotSet))?;
+
+        if !oubli_auth::PinHash::verify(pin, &stored)? {
+            return Err(WalletError::Auth(oubli_auth::AuthError::PinVerification));
+        }
+        crate::debug_event!("wallet.unlock_pin", "pin_verified");
+
+        match self.auth_state.apply(AuthAction::PinSuccess) {
+            AuthTransitionResult::TierChanged(_) => {}
+            AuthTransitionResult::Denied => {
+                return Err(WalletError::InvalidState {
+                    expected: "T0Locked".into(),
+                    got: format!("{:?}", self.auth_state.tier),
+                });
+            }
+        }
+        self.complete_unlock().await
+    }
+
+    pub fn set_pin(&self, pin: &str) -> Result<(), WalletError> {
+        oubli_auth::PinHash::validate(pin)?;
+        let hash = oubli_auth::PinHash::hash(pin)?;
+        self.storage
+            .secure_store(PIN_HASH_KEY, &hash)
+            .map_err(|e| WalletError::Store(oubli_store::StoreError::Platform(e)))?;
+        Ok(())
+    }
+
+    pub fn has_pin(&self) -> bool {
+        self.storage
+            .secure_load(PIN_HASH_KEY)
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
+    async fn complete_unlock(&mut self) -> Result<(), WalletError> {
         // Decrypt seed and derive account
         let salt = self
             .storage
@@ -375,22 +421,22 @@ impl WalletCore {
         let seed_bytes = BlobManager::unwrap(&kek, &blob, APP_ID)?;
         let mnemonic =
             String::from_utf8(seed_bytes).map_err(|e| WalletError::Kms(e.to_string()))?;
-        crate::debug_event!("wallet.unlock_biometric", "seed_decrypted");
+        crate::debug_event!("wallet.unlock", "seed_decrypted");
 
         let account = derive_active_account(&mnemonic, &self.config)?;
-        crate::debug_event!("wallet.unlock_biometric", "account_derived");
+        crate::debug_event!("wallet.unlock", "account_derived");
         let address = self.starknet_address_hex.clone().unwrap_or_default();
         self.active_account = Some(account);
 
         // Init RPC and fetch balance
         self.init_rpc()?;
-        crate::debug_event!("wallet.unlock_biometric", "rpc_initialized");
+        crate::debug_event!("wallet.unlock", "rpc_initialized");
         if let (Some(rpc), Some(ref mut acct)) = (&self.rpc, &mut self.active_account) {
             let res = fetch_and_decrypt_balance(rpc, acct).await;
             match &res {
-                Ok(_) => crate::debug_event!("wallet.unlock_biometric", "balance_refreshed"),
+                Ok(_) => crate::debug_event!("wallet.unlock", "balance_refreshed"),
                 Err(err) => crate::warn_event!(
-                    "wallet.unlock_biometric",
+                    "wallet.unlock",
                     "balance_refresh_failed",
                     "error_kind" = crate::telemetry::error_kind(err)
                 ),
@@ -398,9 +444,9 @@ impl WalletCore {
         }
 
         // Auto-fund: sweep any public WBTC into the privacy pool
-        crate::debug_event!("wallet.unlock_biometric", "auto_fund_started");
+        crate::debug_event!("wallet.unlock", "auto_fund_started");
         self.handle_auto_fund().await;
-        crate::debug_event!("wallet.unlock_biometric", "auto_fund_finished");
+        crate::debug_event!("wallet.unlock", "auto_fund_finished");
 
         // Auto-rollover: claim any pending balance into spendable
         self.handle_auto_rollover().await;
@@ -411,7 +457,7 @@ impl WalletCore {
             balance_sats,
             pending_sats,
         };
-        crate::debug_event!("wallet.unlock_biometric", "ready");
+        crate::debug_event!("wallet.unlock", "ready");
 
         Ok(())
     }
