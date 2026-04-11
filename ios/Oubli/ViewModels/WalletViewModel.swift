@@ -42,11 +42,7 @@ final class WalletViewModel: ObservableObject {
     var pendingSats: String? { stateInfo.pendingSats }
     var operation: String? { stateInfo.operation }
     var errorMessage: String? {
-        Self.supportIssue(
-            fromRaw: stateInfo.errorMessage,
-            context: .general,
-            walletState: stateInfo.state
-        )?.message
+        stateErrorMessage(context: .general)
     }
     var errorDiagnostics: String? {
         Self.supportIssue(
@@ -54,6 +50,9 @@ final class WalletViewModel: ObservableObject {
             context: .general,
             walletState: stateInfo.state
         )?.diagnostics
+    }
+    var sendErrorMessage: String? {
+        stateErrorMessage(context: .send)
     }
     var autoFundError: String? {
         Self.supportIssue(
@@ -622,6 +621,14 @@ final class WalletViewModel: ObservableObject {
 
     func diagnosticsReport(for error: Error, context: SupportContext = .general) -> String {
         Self.supportIssue(from: error, context: context, walletState: stateInfo.state).diagnostics
+    }
+
+    func stateErrorMessage(context: SupportContext = .general) -> String? {
+        Self.supportIssue(
+            fromRaw: stateInfo.errorMessage,
+            context: context,
+            walletState: stateInfo.state
+        )?.message
     }
 
     nonisolated private static func biometricUnlockErrorMessage(from error: Error) -> String {

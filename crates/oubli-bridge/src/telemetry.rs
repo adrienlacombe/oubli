@@ -1,4 +1,3 @@
-#[cfg(debug_assertions)]
 use std::fmt::Display;
 
 #[cfg(debug_assertions)]
@@ -18,6 +17,11 @@ pub(crate) fn error_kind(error: &impl Display) -> &'static str {
     } else {
         "unknown"
     }
+}
+
+#[cfg(not(debug_assertions))]
+pub(crate) fn error_kind(_error: &impl Display) -> &'static str {
+    "unknown"
 }
 
 #[cfg(debug_assertions)]
