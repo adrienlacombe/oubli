@@ -22,7 +22,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 # CSPRNG for crypto polyfill
-getrandom = "0.2"
+getrandom = "0.3"
 
 # Base64 for binary fetch bodies
 base64 = "0.22"
