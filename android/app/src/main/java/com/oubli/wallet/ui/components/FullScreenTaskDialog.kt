@@ -36,7 +36,8 @@ import androidx.compose.ui.window.DialogProperties
  *
  * Full-screen Dialogs on Android 15+ (API 35) don't dispatch navigation bar
  * insets to Compose, so `navigationBarsPadding()` returns 0. We read the
- * system resource directly instead.
+ * system resource and enforce a minimum so the bottom bar is never clipped
+ * — even on custom ROMs (e.g. GrapheneOS) that report smaller values.
  */
 @Composable
 private fun dialogNavBarHeight(): Dp {
@@ -44,7 +45,8 @@ private fun dialogNavBarHeight(): Dp {
     return remember {
         val res = Resources.getSystem()
         val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
-        if (id > 0) with(density) { res.getDimensionPixelSize(id).toDp() } else 0.dp
+        val system = if (id > 0) with(density) { res.getDimensionPixelSize(id).toDp() } else 0.dp
+        maxOf(system, 48.dp) + 16.dp
     }
 }
 
