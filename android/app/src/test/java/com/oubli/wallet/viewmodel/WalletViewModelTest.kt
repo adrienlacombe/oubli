@@ -593,6 +593,9 @@ class FakeWalletRepository : WalletRepository {
     var verifySeedWordError: Throwable? = null
     var getMnemonicResult: String = "word ".repeat(12).trim()
     var getMnemonicError: Throwable? = null
+    private val _incomingPayments = kotlinx.coroutines.flow.MutableSharedFlow<ActivityEventFfi>(extraBufferCapacity = 10)
+    override val incomingPayments: kotlinx.coroutines.flow.SharedFlow<ActivityEventFfi> = _incomingPayments
+
     override val isInitialized: Boolean get() = initialized
 
     override suspend fun initialize(activity: FragmentActivity) {
@@ -637,6 +640,14 @@ class FakeWalletRepository : WalletRepository {
         lastPaidBolt11 = bolt11
         payLightningError?.let { throw it }
         return payLightningResult
+    }
+
+    override suspend fun ensureDeployed() {}
+
+    override suspend fun ensureSwapEngine() {}
+
+    override suspend fun createLnInvoice(amountSats: ULong, exactIn: Boolean): SwapQuoteFfi {
+        throw UnsupportedOperationException("Not implemented in fake")
     }
 
     override suspend fun swapLnToWbtc(amountSats: ULong, testnet: Boolean): SwapQuoteFfi {
