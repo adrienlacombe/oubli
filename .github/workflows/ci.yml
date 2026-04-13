@@ -46,7 +46,7 @@ jobs:
       - name: Generate Rust coverage reports
         run: make coverage-rust-ci
       - name: Upload Rust coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-coverage
           path: target/coverage/rust
@@ -66,7 +66,7 @@ jobs:
       - name: Generate Android JVM coverage reports
         run: make coverage-android-unit-ci
       - name: Upload Android JVM coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-unit-coverage
           path: target/coverage/android-unit
