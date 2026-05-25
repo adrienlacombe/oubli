@@ -105,8 +105,8 @@ dependencies {
     implementation("androidx.biometric:biometric-ktx:1.4.0-alpha02")
 
     // Hilt dependency injection
-    implementation("com.google.dagger:hilt-android:2.59.2")
-    kapt("com.google.dagger:hilt-android-compiler:2.59.2")
+    implementation("com.google.dagger:hilt-android:2.53.1")
+    kapt("com.google.dagger:hilt-android-compiler:2.53.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
 
     // QR code generation
