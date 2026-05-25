@@ -89,3 +89,11 @@ make regen-all
 Full step-by-step in [`android/CLAUDE.md`](android/CLAUDE.md#release). The non-negotiable rule: **publish to GitHub Releases (with the signed APK attached) before pushing to Zapstore**. GitHub is the canonical APK URL and easier to edit/delete; Zapstore is externally visible and hard to reverse, so it goes last.
 
 Order: bump version → build native → regen Kotlin → assemble release APK → commit + tag `vX.Y.Z` → `gh release create` → `zsp publish`.
+
+## Smoke-testing the Android APK on emulator
+
+Full notes in [`android/CLAUDE.md`](android/CLAUDE.md#local-qa--emulator-smoke-testing). Three things that look like bugs but aren't:
+
+1. **App dismisses to launcher on fresh emulator** — `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` has nothing to authenticate against. Run `adb shell locksettings set-pin 1234` first.
+2. **`adb screencap` returns black** — `MainActivity` sets `FLAG_SECURE`. Use `adb shell uiautomator dump /sdcard/ui.xml` to inspect the UI.
+3. **API 36 launches fail without `pm unstop`** — run `adb shell pm unstop com.oubli.wallet` before `am start`.

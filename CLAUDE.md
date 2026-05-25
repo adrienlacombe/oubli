@@ -6,6 +6,7 @@ Repo-wide workflow lives in:
 - [`docs/change-map.md`](docs/change-map.md)
 - [`docs/env.md`](docs/env.md)
 - Release workflow: [`android/CLAUDE.md#release`](android/CLAUDE.md) — GitHub release with APK first, then Zapstore.
+- Local QA on emulator: [`android/CLAUDE.md#local-qa--emulator-smoke-testing`](android/CLAUDE.md) — set device PIN, `pm unstop`, `uiautomator dump` (screencap is black under `FLAG_SECURE`).
 
 This file intentionally stays short to avoid drift. Use the platform-local `CLAUDE.md` files only for additive, directory-specific guidance.
 

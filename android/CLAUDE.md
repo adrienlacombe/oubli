@@ -24,6 +24,37 @@ Repo-wide workflow lives in [`README.md`](../README.md) and [`AGENTS.md`](../AGE
 - ABI: arm64-v8a only, minSdk=35, targetSdk=36, compileSdk=36
 - ProGuard enabled for release (isMinifyEnabled=true, isShrinkResources=true)
 
+# Local QA / Emulator smoke testing
+
+Verifying the release APK on an emulator before publishing:
+
+1. **Set a device PIN first.** The wallet uses `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`. With neither enrolled, auth fails silently with `CredentialAvailable: false` and the app dismisses to launcher (looks like a crash; isn't — unlike iOS, Android has no simulator biometric bypass).
+   ```
+   adb -s emulator-5554 shell locksettings set-pin 1234
+   ```
+
+2. **Install + launch.** API 36 needs `pm unstop` before `am start`:
+   ```
+   adb -s emulator-5554 install -r android/app/build/outputs/apk/release/app-release.apk
+   adb -s emulator-5554 shell pm unstop com.oubli.wallet
+   adb -s emulator-5554 shell am start -n com.oubli.wallet/.MainActivity
+   ```
+
+3. **`adb screencap` returns a black PNG.** `MainActivity` sets `FLAG_SECURE` — correct wallet behavior (blocks screenshots of balances and recovery phrases). To inspect UI use `uiautomator dump` instead, which reads the accessibility tree and bypasses `FLAG_SECURE`:
+   ```
+   adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml
+   adb -s emulator-5554 shell cat /sdcard/ui.xml
+   ```
+   A healthy home screen shows `text="0"`, `text="sats"`, `Receive/Scan/Send` buttons, and `"No transactions yet"`.
+
+4. **Type the PIN (1234) on the BiometricPrompt** to advance — it falls back to PIN entry because no biometric is enrolled.
+
+5. **Smoke-test signals** (logcat):
+   - `Displayed com.oubli.wallet/.MainActivity` within ~200ms
+   - `nativeloader ... liboubli_bridge.so ... ok` and `libjnidispatch.so ... ok` — UniFFI/JNA loaded
+   - No `FATAL`, `AndroidRuntime`, `UnsatisfiedLinkError`, or `dlopen` errors
+   - `BiometricService ... Status: 0` after PIN is set means auth succeeded
+
 # Release
 **Order matters: GitHub release with the APK comes first, then Zapstore.** GitHub release is the canonical, stable APK URL and changelog; it's easy to edit/delete and gives a safety net before the externally-visible Zapstore publish.
 
