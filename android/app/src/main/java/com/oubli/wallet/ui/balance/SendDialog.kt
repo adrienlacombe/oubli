@@ -68,6 +68,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.oubli.wallet.ui.QRScannerScreen
 import com.oubli.wallet.ui.components.FullScreenTaskDialog
+import com.oubli.wallet.ui.components.SlideToConfirm
 import com.oubli.wallet.ui.components.TaskPrimaryButton
 import com.oubli.wallet.ui.theme.OubliReceived
 import com.oubli.wallet.ui.theme.OubliSuccessBg
@@ -100,7 +101,6 @@ fun SendDialog(
     var recipient by rememberSaveable { mutableStateOf(initialRecipient ?: "") }
     var showScanner by rememberSaveable { mutableStateOf(false) }
     var lnNoAmountError by rememberSaveable { mutableStateOf(false) }
-    var showSendConfirmation by rememberSaveable { mutableStateOf(false) }
 
     // Auto-process scanned code on first composition
     LaunchedEffect(initialRecipient) {
@@ -193,14 +193,16 @@ fun SendDialog(
             )
         })
         else -> ({
-            TaskPrimaryButton(
-                title = if (hasLightningInvoice) "Pay Invoice" else "Send",
+            // Slide-to-confirm replaces the modal-on-modal confirmation dialog:
+            // the gesture itself is the commit.
+            SlideToConfirm(
+                label = if (hasLightningInvoice) "Slide to pay invoice" else "Slide to send",
                 enabled = canReview,
-                onClick = {
+                onConfirm = {
                     if (normalizedLightningInvoice != null) {
                         onStartLightningPayment(normalizedLightningInvoice)
                     } else {
-                        showSendConfirmation = true
+                        onConfirm(amount, recipient)
                     }
                 },
             )
@@ -247,28 +249,6 @@ fun SendDialog(
             },
         )
         return
-    }
-
-    if (showSendConfirmation) {
-        val shortRecipient = if (recipient.length > 28) {
-            recipient.take(16) + "..." + recipient.takeLast(8)
-        } else {
-            recipient
-        }
-        AlertDialog(
-            onDismissRequest = { showSendConfirmation = false },
-            title = { Text("Confirm Send") },
-            text = { Text("Send $amount sats to $shortRecipient?") },
-            confirmButton = {
-                Button(onClick = {
-                    showSendConfirmation = false
-                    onConfirm(amount, recipient)
-                }) { Text("Send") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSendConfirmation = false }) { Text("Cancel") }
-            },
-        )
     }
 
     FullScreenTaskDialog(

@@ -1,6 +1,5 @@
 package com.oubli.wallet.ui.balance
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,15 +22,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -60,7 +60,6 @@ import com.oubli.wallet.viewmodel.WalletViewModel
 import com.oubli.wallet.viewmodel.LightningReceiveUiState
 import com.oubli.wallet.viewmodel.LightningSendUiState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -257,26 +256,55 @@ fun BalanceScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Action buttons — Send, Scan, Receive
+        // Action buttons — Pay (camera-first) + Receive
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ActionCircleButton(
-                icon = Icons.Filled.ArrowUpward,
-                label = "Send",
-                onClick = { showDialog = ActionDialog.Send },
-            )
-            ActionCircleButton(
-                icon = Icons.Filled.CameraAlt,
-                label = "Scan",
-                onClick = { showDialog = ActionDialog.Scan },
-            )
-            ActionCircleButton(
-                icon = Icons.Filled.ArrowDownward,
-                label = "Receive",
+            Button(
+                onClick = { showDialog = ActionDialog.Pay },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(64.dp),
+                shape = RoundedCornerShape(32.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.QrCodeScanner,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Pay",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            OutlinedButton(
                 onClick = { showDialog = ActionDialog.Receive },
-            )
+                modifier = Modifier
+                    .weight(1f)
+                    .height(64.dp),
+                shape = RoundedCornerShape(32.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.QrCode2,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Receive",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -297,6 +325,66 @@ fun BalanceScreen(
     // ---- Dialogs ----
 
     when (showDialog) {
+        ActionDialog.Pay -> {
+            // Pay = scanner-first. Scan a code, paste from clipboard, or fall back to manual entry.
+            // After any of those, we land in SendDialog with the recipient pre-filled (or blank for manual).
+            var scannedCode by remember { mutableStateOf<String?>(null) }
+            var manual by remember { mutableStateOf(false) }
+            when {
+                scannedCode != null -> {
+                    SendDialog(
+                        balanceSats = balanceSats,
+                        calculateSendFee = onCalculateSendFee,
+                        onConfirm = { amount, recipient ->
+                            onSend(amount, recipient)
+                            showDialog = null
+                        },
+                        onStartLightningPayment = onStartLightningPayment,
+                        lightningOperation = lightningOperation,
+                        lightningSendState = lightningSendState,
+                        onClearLightningSendState = onClearLightningSendState,
+                        onDismiss = { showDialog = null },
+                        initialRecipient = scannedCode!!,
+                        satsToFiatRaw = satsToFiatRaw,
+                        fiatToSats = fiatToSats,
+                        fiatCurrency = fiatCurrency,
+                        fiatSymbol = WalletViewModel.fiatSymbol(fiatCurrency),
+                    )
+                }
+                manual -> {
+                    SendDialog(
+                        balanceSats = balanceSats,
+                        calculateSendFee = onCalculateSendFee,
+                        onConfirm = { amount, recipient ->
+                            onSend(amount, recipient)
+                            showDialog = null
+                        },
+                        onStartLightningPayment = onStartLightningPayment,
+                        lightningOperation = lightningOperation,
+                        lightningSendState = lightningSendState,
+                        onClearLightningSendState = onClearLightningSendState,
+                        onDismiss = { showDialog = null },
+                        contacts = contacts,
+                        satsToFiatRaw = satsToFiatRaw,
+                        fiatToSats = fiatToSats,
+                        fiatCurrency = fiatCurrency,
+                        fiatSymbol = WalletViewModel.fiatSymbol(fiatCurrency),
+                    )
+                }
+                else -> {
+                    Dialog(
+                        onDismissRequest = { showDialog = null },
+                        properties = DialogProperties(usePlatformDefaultWidth = false),
+                    ) {
+                        QRScannerScreen(
+                            onCodeScanned = { code -> scannedCode = code },
+                            onClose = { showDialog = null },
+                            onManualEntry = { manual = true },
+                        )
+                    }
+                }
+            }
+        }
         ActionDialog.Send -> {
             SendDialog(
                 balanceSats = balanceSats,
@@ -316,40 +404,6 @@ fun BalanceScreen(
                 fiatCurrency = fiatCurrency,
                 fiatSymbol = WalletViewModel.fiatSymbol(fiatCurrency),
             )
-        }
-        ActionDialog.Scan -> {
-            var scannedCode by remember { mutableStateOf<String?>(null) }
-            if (scannedCode != null) {
-                // Route scanned code to Send dialog
-                SendDialog(
-                    balanceSats = balanceSats,
-                    calculateSendFee = onCalculateSendFee,
-                    onConfirm = { amount, recipient ->
-                        onSend(amount, recipient)
-                        showDialog = null
-                    },
-                    onStartLightningPayment = onStartLightningPayment,
-                    lightningOperation = lightningOperation,
-                    lightningSendState = lightningSendState,
-                    onClearLightningSendState = onClearLightningSendState,
-                    onDismiss = { showDialog = null },
-                    initialRecipient = scannedCode!!,
-                    satsToFiatRaw = satsToFiatRaw,
-                    fiatToSats = fiatToSats,
-                    fiatCurrency = fiatCurrency,
-                    fiatSymbol = WalletViewModel.fiatSymbol(fiatCurrency),
-                )
-            } else {
-                Dialog(
-                    onDismissRequest = { showDialog = null },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                ) {
-                    QRScannerScreen(
-                        onCodeScanned = { code -> scannedCode = code },
-                        onClose = { showDialog = null },
-                    )
-                }
-            }
         }
         ActionDialog.Receive -> {
             ReceiveDialog(
@@ -417,21 +471,13 @@ private fun ActionCircleButton(
     label: String,
     onClick: () -> Unit,
 ) {
-    val view = LocalView.current
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    // Retained for backwards compat with any callers; the V1 home uses pill buttons.
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(
-            onClick = {
-                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                onClick()
-            },
+            onClick = onClick,
             modifier = Modifier
                 .size(64.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape,
-                ),
+                .background(color = MaterialTheme.colorScheme.primary, shape = CircleShape),
         ) {
             Icon(
                 imageVector = icon,
@@ -450,7 +496,7 @@ private fun ActionCircleButton(
 }
 
 private enum class ActionDialog {
-    Send, Receive, Scan, ShowSeedPhrase, FiatCurrency, Contacts
+    Pay, Send, Receive, ShowSeedPhrase, FiatCurrency, Contacts
 }
 
 @Composable

@@ -20,7 +20,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +58,7 @@ import java.util.concurrent.Executors
 fun QRScannerScreen(
     onCodeScanned: (String) -> Unit,
     onClose: () -> Unit,
+    onManualEntry: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var hasPermission by remember {
@@ -108,6 +112,26 @@ fun QRScannerScreen(
                     .navigationBarsPadding()
                     .padding(bottom = 120.dp),
             )
+            if (onManualEntry != null) {
+                FilledTonalButton(
+                    onClick = onManualEntry,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.12f),
+                        contentColor = Color.White,
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Text("Type manually")
+                }
+            }
         } else {
             Column(
                 modifier = Modifier.align(Alignment.Center).padding(24.dp),
