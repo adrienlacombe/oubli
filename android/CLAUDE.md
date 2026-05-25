@@ -45,7 +45,7 @@ Verifying the release APK on an emulator before publishing:
    adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml
    adb -s emulator-5554 shell cat /sdcard/ui.xml
    ```
-   A healthy home screen shows `text="0"`, `text="sats"`, `Receive/Scan/Send` buttons, and `"No transactions yet"`.
+   A healthy home screen shows `text="0"`, `text="sats"`, `Pay/Receive` pill buttons, and `"No transactions yet"`.
 
 4. **Type the PIN (1234) on the BiometricPrompt** to advance — it falls back to PIN entry because no biometric is enrolled.
 
@@ -73,8 +73,8 @@ Verifying the release APK on an emulator before publishing:
 9. **Zapstore publish** (after):
    ```
    cd android && SIGN_WITH="<bunker_uri>" ~/go/bin/zsp publish \
-     -quiet --skip-preview --skip-certificate-linking zapstore.yaml
+     --quiet --skip-preview --skip-certificate-linking zapstore.yaml
    ```
-   Requires Amber tap-to-sign approval on the signing device. `-quiet` is the auto-confirm flag (was `-y`; renamed in zsp v0.4.10 — `-y` now errors).
+   Requires Amber tap-to-sign approval on the signing device. `--quiet` is the auto-confirm flag (was `-y` pre-v0.4.10). **Note the two dashes** — `-quiet` errors with "flag provided but not defined". `--quiet` suppresses all output including the success summary, so use `--verbose` (no `--quiet`) if you need to debug a failed publish.
 
 Never invoke `zsp publish` before the GitHub release exists.
