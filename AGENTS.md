@@ -83,3 +83,9 @@ make regen-all
 - iOS-specific guidance lives in [`ios/CLAUDE.md`](ios/CLAUDE.md).
 - Android-specific guidance lives in [`android/CLAUDE.md`](android/CLAUDE.md).
 - Rust workspace notes live in [`crates/CLAUDE.md`](crates/CLAUDE.md).
+
+## Releasing the Android app
+
+Full step-by-step in [`android/CLAUDE.md`](android/CLAUDE.md#release). The non-negotiable rule: **publish to GitHub Releases (with the signed APK attached) before pushing to Zapstore**. GitHub is the canonical APK URL and easier to edit/delete; Zapstore is externally visible and hard to reverse, so it goes last.
+
+Order: bump version → build native → regen Kotlin → assemble release APK → commit + tag `vX.Y.Z` → `gh release create` → `zsp publish`.
