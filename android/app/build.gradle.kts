@@ -79,7 +79,7 @@ android {
 
 dependencies {
     // JNA - required by UniFFI-generated Kotlin bindings
-    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
 
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
@@ -98,15 +98,15 @@ dependencies {
 
     // Activity & Lifecycle
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
 
     // Biometric
     implementation("androidx.biometric:biometric-ktx:1.4.0-alpha02")
 
     // Hilt dependency injection
-    implementation("com.google.dagger:hilt-android:2.53.1")
-    kapt("com.google.dagger:hilt-android-compiler:2.53.1")
+    implementation("com.google.dagger:hilt-android:2.59.2")
+    kapt("com.google.dagger:hilt-android-compiler:2.59.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
 
     // QR code generation
@@ -119,7 +119,7 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Core AndroidX
-    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.core:core-ktx:1.19.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
